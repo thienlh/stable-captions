@@ -143,7 +143,8 @@ html[data-ytsc-boring-window="100"] { --ytsc-boring-alpha: 1; }
     --ytsc-highlight-color: var(--ytsc-hdr-highlight-color);
   }
 
-  .html5-video-player:has(.ytp-hdr-quality-badge) #ytsc-overlay .ytsc-word {
+  /* Filtering individual Short words clips the outline at the word bounds in WebKit. */
+  :where(html:not([data-ytsc-style="tiktok"])) .html5-video-player:has(.ytp-hdr-quality-badge) #ytsc-overlay .ytsc-word {
     /* WebKit clips the boost at SDR white when it paints the filter inline. */
     will-change: filter;
     filter: brightness(1.3);
@@ -210,7 +211,8 @@ html[data-ytsc-style="tiktok"] #ytsc-overlay {
      of the 0.12em stroke preserves the previous 0.06em outline. */
   -webkit-text-stroke: 0.12em #000;
   paint-order: stroke fill;
-  text-shadow: 0 0.06em 0.12em rgba(0, 0, 0, 0.35);
+  /* WebKit can paint rectangular shadows behind stroked text. */
+  text-shadow: none;
 }
 
 html[data-ytsc-style="tiktok"] #ytsc-overlay.ytsc-fresh {
