@@ -141,8 +141,10 @@
      * The overlay still highlights from those times; `h` turns that off.
      * Formatted captions that already contain newlines stay on the old path:
      * short chunks and the same highlight.
+     * `asr` says the track is auto-generated (`kind=asr`), so untimed two-line
+     * blocks roll up and the previous block's end times the second line.
      */
-    parseWords(payload) {
+    parseWords(payload, { asr = false } = {}) {
       if (!Array.isArray(payload?.events)) return [];
       const events = [...payload.events].sort(
         (a, b) => Number(a?.tStartMs || 0) - Number(b?.tStartMs || 0)
@@ -182,7 +184,8 @@
         const windowId = event.wWinId ?? null;
         // Two-line ASR blocks roll up: the previous block leaves the screen when
         // this block's second line is said. That is the only line timing we get.
-        const lastLineMs = hasOffsets ? null : untimedEndMs.get(windowId);
+        // Overlapping manual cues don't roll up, so they never use it.
+        const lastLineMs = asr && !hasOffsets ? untimedEndMs.get(windowId) : null;
         blocks.push({ event, startMs, endMs, hasOffsets, rolling, drop, lastLineMs });
         if (hasOffsets) untimedEndMs.delete(windowId);
         else untimedEndMs.set(windowId, endMs);
@@ -354,8 +357,9 @@
      * or sentence end. Measured against word-timed ASR of the same speech.
      */
     _spokenWeight(text) {
-      if (/[.?!…]["'”’»)\]]*$/u.test(text)) return text.length + 9;
-      if (/[,;:]["'”’»)\]]*$/u.test(text)) return text.length + 4;
+      const pause = this.text.pauseAfter(text);
+      if (pause === 'sentence') return text.length + 9;
+      if (pause === 'clause') return text.length + 4;
       return text.length + 1;
     }
 

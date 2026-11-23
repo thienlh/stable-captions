@@ -239,7 +239,7 @@ test('a two-line ASR block starts its second line when the previous block leaves
       },
       { tStartMs: 28520, dDurationMs: 5280, wWinId: 1, segs: [{ utf8: 'have for you all.\nI have nothing.' }] },
     ],
-  });
+  }, { asr: true });
   const at = (text) => words.find((w) => w.text === text).startMs;
   assert.equal(at('conference,'), 27320);
   assert.equal(at('I'), 30400);
@@ -250,7 +250,7 @@ test('a two-line ASR block starts its second line when the previous block leaves
 
 test('only an untimed block in the same window marks when the second line starts', () => {
   const secondLine = (events) =>
-    new Json3Parser().parseWords({ events }).find((w) => w.text === 'second').startMs;
+    new Json3Parser().parseWords({ events }, { asr: true }).find((w) => w.text === 'second').startMs;
   const block = { tStartMs: 1000, dDurationMs: 4000, wWinId: 1, segs: [{ utf8: 'first line\nsecond line' }] };
   assert.equal(secondLine([{ tStartMs: 0, dDurationMs: 3000, wWinId: 1, segs: [{ utf8: 'before' }] }, block]), 3000);
   const otherWindow = { tStartMs: 0, dDurationMs: 3000, wWinId: 2, segs: [{ utf8: 'before' }] };
@@ -267,4 +267,28 @@ test('untimed words leave room for the pause after a sentence end', () => {
   const go = words.find((w) => w.text === 'go');
   // "Stop." takes its length plus the pause; "Then" takes its length plus a word gap.
   assert.ok(then.startMs - 0 > 2 * (go.startMs - then.startMs), 'the pause follows "Stop."');
+});
+
+test('overlapping manual cues do not time their second line from the previous cue', () => {
+  // Manual cues don't roll up: the previous one ending says nothing about the next one's lines.
+  const events = [
+    { tStartMs: 0, dDurationMs: 1100, segs: [{ utf8: 'previous cue' }] },
+    { tStartMs: 1000, dDurationMs: 4000, segs: [{ utf8: 'one two three four\nfive six seven eight' }] },
+  ];
+  const words = new Json3Parser().parseWords({ events });
+  const at = (text) => words.find((w) => w.text === text).startMs;
+  assert.ok(at('four') > 2000, 'the first line is not squeezed into 100 ms');
+  assert.ok(at('five') > 2500, 'the second line starts partway through the cue');
+});
+
+test('Arabic and full-width marks leave room for a pause like Latin ones', () => {
+  const gapAfter = (text) => {
+    const words = new Json3Parser().parseWords({
+      events: [{ tStartMs: 0, dDurationMs: 3000, segs: [{ utf8: `${text} bb cc` }] }],
+    });
+    return words[1].startMs - words[0].startMs;
+  };
+  const plain = gapAfter('aa');
+  for (const text of ['aa،', 'aa؛', 'aa，', 'aa、', 'aa；']) assert.ok(gapAfter(text) > plain, `${text} is a clause pause`);
+  for (const text of ['aa؟', 'aa。', 'aa！', 'aa？']) assert.ok(gapAfter(text) > gapAfter('aa،'), `${text} is a sentence pause`);
 });
