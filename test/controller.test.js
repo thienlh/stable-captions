@@ -506,3 +506,12 @@ test('no caption is shown while an ad plays, and captions return after it', asyn
   assert.equal(overlay.calls.at(-1), 'render:hello');
   controller.stop();
 });
+
+test('the parser is told whether the loaded track is auto-generated', () => {
+  const { controller } = makeController();
+  const seen = [];
+  controller.parser = { parseWords: (p, options) => { seen.push(options?.asr); return p.words || []; } };
+  controller.useTimeline(payload('asr'), 'https://yt/api/timedtext?v=A&lang=en&kind=asr', 'test', 'tap');
+  controller.useTimeline(payload('manual'), 'https://yt/api/timedtext?v=A&lang=en', 'test', 'tap');
+  assert.deepEqual(seen, [true, false]);
+});

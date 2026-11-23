@@ -141,8 +141,10 @@
      * The overlay still highlights from those times; `h` turns that off.
      * Formatted captions that already contain newlines stay on the old path:
      * short chunks and the same highlight.
+     * `asr` says the track is auto-generated (`kind=asr`), so untimed two-line
+     * blocks roll up and the previous block's end times the second line.
      */
-    parseWords(payload) {
+    parseWords(payload, { asr = false } = {}) {
       if (!Array.isArray(payload?.events)) return [];
       const events = [...payload.events].sort(
         (a, b) => Number(a?.tStartMs || 0) - Number(b?.tStartMs || 0)
@@ -160,6 +162,7 @@
       const blocks = [];
       let prevTexts = [];
       let prevEndMs = -Infinity;
+      const untimedEndMs = new Map(); // caption window -> end of its last untimed block
       events.forEach((event, i) => {
         if (this.text.isRollupBreak(event)) return;
         const startMs = Number(event?.tStartMs);
@@ -178,7 +181,14 @@
             ? overlap >= 2 || (overlap >= 1 && (event.aAppend || overlap === prevTexts.length))
             : this._windowGrew(prevTexts, texts, overlap);
         const drop = rolling && startMs <= prevEndMs + 1000 ? overlap : 0;
-        blocks.push({ event, startMs, endMs, hasOffsets, rolling, drop });
+        const windowId = event.wWinId ?? null;
+        // Two-line ASR blocks roll up: the previous block leaves the screen when
+        // this block's second line is said. That is the only line timing we get.
+        // Overlapping manual cues don't roll up, so they never use it.
+        const lastLineMs = asr && !hasOffsets ? untimedEndMs.get(windowId) : null;
+        blocks.push({ event, startMs, endMs, hasOffsets, rolling, drop, lastLineMs });
+        if (hasOffsets) untimedEndMs.delete(windowId);
+        else untimedEndMs.set(windowId, endMs);
         prevTexts = texts;
         prevEndMs = endMs;
       });
@@ -192,12 +202,12 @@
       const nextNewWordMs = new Map();
       for (let b = blocks.length - 1; b >= 0; b--) {
         const block = blocks[b];
-        const { event, startMs, hasOffsets, rolling } = block;
+        const { event, startMs, hasOffsets, rolling, lastLineMs } = block;
         const windowId = event.wWinId ?? null;
         let endMs = block.endMs;
         const cutoff = nextNewWordMs.get(windowId);
         if (!hasOffsets && cutoff > startMs && cutoff < endMs) endMs = cutoff;
-        const eventWords = this._eventWords(event, startMs, endMs).slice(block.drop);
+        const eventWords = this._eventWords(event, startMs, endMs, lastLineMs).slice(block.drop);
         block.words = eventWords;
         if (!eventWords.length) continue;
         nextNewWordMs.set(windowId, eventWords[0].startMs);
@@ -281,7 +291,12 @@
       return segs.length > 1 && segs.slice(1).every((s) => s.tOffsetMs != null);
     }
 
-    _eventWords(event, startMs, endMs) {
+    /**
+     * The words of one event, each with a time. Untimed text is spread by
+     * spoken weight. `lastLineMs`, when it falls inside the event, is when the
+     * second of two lines starts, so each line is spread over its own span.
+     */
+    _eventWords(event, startMs, endMs, lastLineMs = null) {
       let segs = Array.isArray(event?.segs) ? event.segs : [];
       const hasOffsets = this._hasWordOffsets(event);
       if (!hasOffsets) {
@@ -291,13 +306,20 @@
           .split(/\r?\n+/)
           .map((line) => this.text.splitWords(line))
           .filter((line) => line.length);
-        const texts = [];
-        const lineBreakAt = new Set();
-        for (const line of groups) {
-          if (texts.length) lineBreakAt.add(texts.length);
-          texts.push(...line);
+        if (groups.length === 2 && lastLineMs > startMs && lastLineMs < endMs) {
+          segs = [
+            { texts: groups[0], tOffsetMs: 0 },
+            { texts: groups[1], tOffsetMs: lastLineMs - startMs, lineBreakAt: new Set([0]) },
+          ];
+        } else {
+          const texts = [];
+          const lineBreakAt = new Set();
+          for (const line of groups) {
+            if (texts.length) lineBreakAt.add(texts.length);
+            texts.push(...line);
+          }
+          segs = [{ utf8: '', tOffsetMs: 0, texts, lineBreakAt }];
         }
-        segs = [{ utf8: '', tOffsetMs: 0, texts, lineBreakAt }];
       }
 
       const out = [];
@@ -307,12 +329,13 @@
         const segStart = startMs + Number(seg.tOffsetMs || 0);
         const next = segs[i + 1];
         const segEnd = Math.max(segStart, next ? startMs + Number(next.tOffsetMs) : endMs);
-        const totalChars = texts.reduce((n, t) => n + t.length, 0);
+        const weights = texts.map((text) => this._spokenWeight(text));
+        const total = weights.reduce((n, w) => n + w, 0);
         let offset = 0;
         texts.forEach((text, wordIndex) => {
-          const wStart = segStart + ((segEnd - segStart) * offset) / totalChars;
-          offset += text.length;
-          const wEnd = segStart + ((segEnd - segStart) * offset) / totalChars;
+          const wStart = segStart + ((segEnd - segStart) * offset) / total;
+          offset += weights[wordIndex];
+          const wEnd = segStart + ((segEnd - segStart) * offset) / total;
           const word = {
             text,
             startMs: Math.round(wStart),
@@ -326,6 +349,18 @@
       // Punctuation can arrive as its own seg (", " or " !"). Fold it across the whole
       // event, so a repeated window tokenizes the same however its segs are cut.
       return this._attachPunctuation(out);
+    }
+
+    /**
+     * How long a word takes to say, in characters, for spreading untimed text:
+     * its length, a gap after it, and a longer one for the pause after a comma
+     * or sentence end. Measured against word-timed ASR of the same speech.
+     */
+    _spokenWeight(text) {
+      const pause = this.text.pauseAfter(text);
+      if (pause === 'sentence') return text.length + 9;
+      if (pause === 'clause') return text.length + 4;
+      return text.length + 1;
     }
 
     /** A folded mark keeps its word's timing: a lingering mark is not speech. */

@@ -4,7 +4,11 @@
   // Punctuation that hangs off the word before it ("hello ," -> "hello,") or
   // leads into the word after it ("¿ qué" -> "¿qué"). Bare straight quotes are
   // ambiguous (opening or closing), so they stay put.
-  const CLOSING = /^[.,;:!?…%)\]}»”’"'、。，！？；：）」』]+$/u;
+  const CLOSING = /^[.,;:!?…%)\]}»”’"'、。，！？；：）」』،؛؟]+$/u;
+  // Marks a speaker pauses after, in the scripts caption tracks use (Latin,
+  // full-width CJK, Arabic), allowing closing quotes or brackets after them.
+  const SENTENCE_PAUSE = /[.!?…。！？؟]["'»”’)}\]）」』]*$/u;
+  const CLAUSE_PAUSE = /[,;:、，；：،؛]["'»”’)}\]）」』]*$/u;
   const OPENING = /^[(\[{«“‘¿¡（「『]+$/u;
   const QUOTES = /^["']+$/u;
 
@@ -61,6 +65,13 @@
       }
       if (lead) out.push(withText(lead.item, lead.text));
       return out;
+    }
+
+    /** 'sentence' | 'clause' when a speaker pauses after this word, else null. */
+    static pauseAfter(text) {
+      if (SENTENCE_PAUSE.test(text)) return 'sentence';
+      if (CLAUSE_PAUSE.test(text)) return 'clause';
+      return null;
     }
 
     static sentenceIsComplete(text) {

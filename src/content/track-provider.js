@@ -134,6 +134,16 @@
       return baseA === baseB && (!restA.length || !restB.length);
     }
 
+    /** True when a timedtext URL is an auto-generated (ASR) track, translated or not. */
+    static isAsrUrl(url) {
+      try {
+        const u = new URL(url, globalThis.location?.href || 'https://www.youtube.com/');
+        return u.searchParams.get('kind') === 'asr';
+      } catch {
+        return false;
+      }
+    }
+
     /** The visible language: an auto-translation target, otherwise the source track. */
     static languageFromUrl(url) {
       try {

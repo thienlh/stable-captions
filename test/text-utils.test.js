@@ -46,3 +46,17 @@ test('splitWords keeps dashes, symbols and bare quotes as tokens', () => {
   assert.deepEqual(TextUtils.splitWords(', then'), [',', 'then']);
   assert.deepEqual(TextUtils.splitWords('so ('), ['so', '(']);
 });
+
+test('pauseAfter knows Latin, full-width and Arabic sentence and clause marks', () => {
+  for (const text of ['end.', 'end?', 'end!"', 'end…', '结束。', '结束？）', 'نهاية؟']) {
+    assert.equal(TextUtils.pauseAfter(text), 'sentence', text);
+  }
+  for (const text of ['and,', 'and;', 'and:', '然后，', '然后、', 'ثم،', 'ثم؛']) {
+    assert.equal(TextUtils.pauseAfter(text), 'clause', text);
+  }
+  assert.equal(TextUtils.pauseAfter('word'), null);
+});
+
+test('splitWords folds a spaced Arabic comma or question mark into the word before it', () => {
+  assert.deepEqual(TextUtils.splitWords('مرحبا ، كيف حالك ؟'), ['مرحبا،', 'كيف', 'حالك؟']);
+});

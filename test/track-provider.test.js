@@ -147,3 +147,10 @@ test('selectionFromUrl restores the source track and translation', () => {
   assert.equal(TrackProvider.languageFromUrl(`${asr.baseUrl}&tlang=vi-VN`), 'vi-vn');
   assert.equal(TrackProvider.languageFromUrl('not a url'), null);
 });
+
+test('isAsrUrl recognises auto-generated tracks, translated or not', () => {
+  assert.equal(TrackProvider.isAsrUrl('https://www.youtube.com/api/timedtext?v=a&lang=en&kind=asr'), true);
+  assert.equal(TrackProvider.isAsrUrl('/api/timedtext?v=a&lang=en&kind=asr&tlang=fr'), true);
+  assert.equal(TrackProvider.isAsrUrl('https://www.youtube.com/api/timedtext?v=a&lang=en'), false);
+  assert.equal(TrackProvider.isAsrUrl('not a url ::'), false);
+});

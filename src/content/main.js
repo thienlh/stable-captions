@@ -289,7 +289,8 @@
     }
 
     useTimeline(payload, url, label, source) {
-      const words = this.parser.parseWords(payload);
+      const asr = globalThis.YTSC.TrackProvider.isAsrUrl(url);
+      const words = this.parser.parseWords(payload, { asr });
       const chunks = this.buildChunks(words);
       if (!words.length) return false;
       this.stop();
