@@ -222,3 +222,49 @@ test('a block in another caption window does not cut an untimed block short', ()
   });
   assert.equal(words.find((w) => w.text === 'going').endMs, 6000);
 });
+
+test('a two-line ASR block starts its second line when the previous block leaves', () => {
+  // YouTube ASR (Nov 2026, `exp=xpe`): no word offsets, but a block stays up
+  // until the next block's second line is said. Word-timed ASR of the same talk
+  // has "conference," at 27320 and "I" at 30400.
+  const words = new Json3Parser().parseWords({
+    events: [
+      { tStartMs: 0, dDurationMs: 354800, id: 1, wpWinPosId: 1, wsWinStyleId: 1 },
+      { tStartMs: 19560, dDurationMs: 7760, wWinId: 1, segs: [{ utf8: 'Hear that?\nThat\'s nothing.' }] },
+      {
+        tStartMs: 24840,
+        dDurationMs: 5560,
+        wWinId: 1,
+        segs: [{ utf8: 'Which is what I, as a speaker at today\'s\nconference,' }],
+      },
+      { tStartMs: 28520, dDurationMs: 5280, wWinId: 1, segs: [{ utf8: 'have for you all.\nI have nothing.' }] },
+    ],
+  });
+  const at = (text) => words.find((w) => w.text === text).startMs;
+  assert.equal(at('conference,'), 27320);
+  assert.equal(at('I'), 30400);
+  assert.ok(words.find((w) => w.text === 'today\'s').endMs <= 27320, 'the first line ends where the second starts');
+  // The first block has no previous block, so it is spread as one span.
+  assert.ok(at('That\'s') > 19560 && at('That\'s') < 24840);
+});
+
+test('only an untimed block in the same window marks when the second line starts', () => {
+  const secondLine = (events) =>
+    new Json3Parser().parseWords({ events }).find((w) => w.text === 'second').startMs;
+  const block = { tStartMs: 1000, dDurationMs: 4000, wWinId: 1, segs: [{ utf8: 'first line\nsecond line' }] };
+  assert.equal(secondLine([{ tStartMs: 0, dDurationMs: 3000, wWinId: 1, segs: [{ utf8: 'before' }] }, block]), 3000);
+  const otherWindow = { tStartMs: 0, dDurationMs: 3000, wWinId: 2, segs: [{ utf8: 'before' }] };
+  assert.notEqual(secondLine([otherWindow, block]), 3000);
+  const timed = { tStartMs: 0, dDurationMs: 3000, wWinId: 1, segs: [{ utf8: 'timed' }, { utf8: ' words', tOffsetMs: 500 }] };
+  assert.notEqual(secondLine([timed, block]), 3000);
+});
+
+test('untimed words leave room for the pause after a sentence end', () => {
+  const words = new Json3Parser().parseWords({
+    events: [{ tStartMs: 0, dDurationMs: 3000, segs: [{ utf8: 'Stop. Then go on' }] }],
+  });
+  const then = words.find((w) => w.text === 'Then');
+  const go = words.find((w) => w.text === 'go');
+  // "Stop." takes its length plus the pause; "Then" takes its length plus a word gap.
+  assert.ok(then.startMs - 0 > 2 * (go.startMs - then.startMs), 'the pause follows "Stop."');
+});
