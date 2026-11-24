@@ -52,7 +52,10 @@
   // its own, off by default, so it starts out as plain as YouTube's captions.
   const highlightSetting = (style) => (style === 'boring' ? 'boringHighlight' : 'highlight');
 
+  // enabled: the popup's master switch. Off leaves YouTube's own captions alone
+  // everywhere and dims the toolbar icon (background.js).
   const DEFAULTS = {
+    enabled: true,
     style: 'frosted', size: 'medium', clean: true, highlight: true, boringHighlight: false,
     frostedWindow: 'medium', tiktokWindow: 'off', boringWindow: '75',
   };

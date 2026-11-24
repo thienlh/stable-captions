@@ -11,6 +11,7 @@
    *   timeline  the whole caption track is known; painted from video time
    *   live      stabilizing the native caption DOM as it changes
    *   none      nothing to show for this video (native captions untouched)
+   *   off       switched off in the popup (native captions untouched)
    * Async steps can finish out of order, so each checks it is still wanted:
    *  - `gen` counts navigations; anything started for an earlier page is dropped.
    *  - The player's own download (a tap) outranks our fetch: our fetch never
@@ -54,6 +55,7 @@
       this.pendingSelection = null;
       this.selectionTimeoutMs = 10000;
       this.cacheMissRefetchMs = 250; // let a normal player download win before refetching
+      this.resumeUrl = null; // the download to show again when switched back on
       this.taps = []; // this video's tapped downloads, reused when the player answers from its cache
       this.tapCacheLimit = 4;
       this.tapCacheCharLimit = 1000000; // total UTF-16 code units, not eight unbounded bodies
@@ -86,19 +88,20 @@
       for (const type of ['play', 'pause', 'seeked', 'loadeddata']) {
         document.addEventListener(type, (e) => this.onMediaEvent(e), true);
       }
-      // "Clean verbatim" and the style (chunk length) are popup settings mirrored onto
-      // <html> by settings-bridge.js.
+      // The master switch, "clean verbatim" and the style (chunk length) are popup
+      // settings mirrored onto <html> by settings-bridge.js.
       // aria-pressed on the CC button repaints while paused (no frame loop then).
       this.followStyle();
       new MutationObserver((records) => {
         const changed = (name) => records.some((r) => r.attributeName === name);
+        if (changed('data-ytsc-enabled')) this.reload(); // switched off, or back on
         if (changed('data-ytsc-style')) this.followStyle();
         if (changed('data-ytsc-clean') || changed('data-ytsc-style')) this.rechunk();
         if (records.some((r) => r.target.matches?.('.ytp-subtitles-button'))) this.renderNow();
       }).observe(document.documentElement, {
         attributes: true,
         subtree: true,
-        attributeFilter: ['data-ytsc-clean', 'data-ytsc-style', 'aria-pressed'],
+        attributeFilter: ['data-ytsc-enabled', 'data-ytsc-clean', 'data-ytsc-style', 'aria-pressed'],
       });
       this.reload();
     }
@@ -114,6 +117,20 @@
 
     cleanEnabled() {
       return document.documentElement.dataset.ytscClean === 'true';
+    }
+
+    /**
+     * The popup's master switch: 'on', 'off', or null until settings-bridge.js has
+     * read it from storage (then the <html> attribute observer reloads).
+     */
+    power() {
+      const dataset = globalThis.document?.documentElement?.dataset;
+      if (!dataset) return 'on'; // no page: under node:test
+      return { true: 'on', false: 'off' }[dataset.ytscEnabled] ?? null;
+    }
+
+    switchedOn() {
+      return this.power() === 'on';
     }
 
     /** Each style has its own chunk length (see chunker.js). */
@@ -151,6 +168,12 @@
         return;
       }
       this.rememberTap(entry);
+      // Switched off (or not known yet): keep the download, the newest is what
+      // YouTube shows, so switching back on shows it too.
+      if (!this.switchedOn()) {
+        this.resumeUrl = entry.url;
+        return;
+      }
       if (entry.url === this.loadedUrl) return;
       const pending = this.pendingSelection;
       if (!pending) {
@@ -455,7 +478,7 @@
      * are not a choice.
      */
     onCaptionMenuEvent(event) {
-      if (!event?.isTrusted) return;
+      if (!event?.isTrusted || !this.switchedOn()) return; // off: YouTube's menu is its own
       if (event.type === 'keydown' && event.key !== 'Enter' && event.key !== ' ') return;
       if (event.type === 'keydown' && event.repeat) return;
       const label = this.captionMenuLabel(event.target);
@@ -503,7 +526,7 @@
     }
 
     notePlayerTrackChoice(track) {
-      if (this.applyingPlayerTrack || !this.captionMenuArmed()) return;
+      if (this.applyingPlayerTrack || !this.captionMenuArmed() || !this.switchedOn()) return;
       const language = globalThis.YTSC.TrackProvider.normalizeLanguage(
         track?.translationLanguage?.languageCode || track?.languageCode
       );
@@ -783,6 +806,18 @@
         this.release('idle');
         return;
       }
+      // Not read yet counts as off; the attribute observer calls back in once it is.
+      if (this.power() !== 'on') {
+        this.switchOff(id);
+        return;
+      }
+      // Switched back on: show what was showing, from the kept download, without
+      // waiting for the player to list its tracks again.
+      if (this.mode === 'off') {
+        const kept = this.resumeTap(id);
+        if (kept && (await this.loadFromTap(kept))) return;
+        if (gen !== this.gen) return;
+      }
       // Wait for the player to expose captions (SPA navigation is async).
       for (let i = 0; i < 40; i++) {
         const found = this.provider.getTracksWithSource
@@ -949,6 +984,28 @@
       this.live = null;
       this.mode = 'idle';
       this.overlay.clear();
+    }
+
+    /**
+     * Switched off in the popup: native captions come back, as in release(), but
+     * this video's caption downloads are kept for when it is switched back on.
+     * Another video's are dropped (navigating while off).
+     */
+    switchOff(videoId) {
+      // Shift+L can show a cached download that is not the player's latest:
+      // remember which one was showing.
+      if (this.mode === 'timeline' && this.source === 'tap') this.resumeUrl = this.loadedUrl;
+      this.settlePending('cancelled'); // a Shift+L switch in flight: no toast, YouTube's captions show
+      this.stop();
+      this.mode = 'off';
+      this.overlay.destroy();
+      this.pruneTapCache(videoId);
+    }
+
+    /** The kept download to show when switched back on: what was showing, else the newest. */
+    resumeTap(videoId) {
+      const mine = this.taps.filter((t) => t.videoId === videoId);
+      return mine.findLast((t) => t.url === this.resumeUrl) || mine.at(-1) || null;
     }
 
     /** Nothing of ours to show: remove the overlay and give native captions back. */

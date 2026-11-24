@@ -2,6 +2,7 @@
 // and zips it (input for App Store Connect's packager). The only difference from the
 // Chrome/Firefox build: the toolbar uses the monochrome glyph, which Safari renders as
 // a template image (grey, or the accent colour when the extension can run on the tab).
+// background.js swaps it for toolbar-*-off.png (the glyph with a slash) when switched off.
 const fs = require('fs');
 const path = require('path');
 const { execFileSync } = require('child_process');
@@ -32,6 +33,10 @@ manifest.action.default_icon = {
   48: 'icons/toolbar-48.png',
 };
 delete manifest.browser_specific_settings; // Gecko-only
+// The toolbar-icon script runs as an event page, as on Firefox: Safari requires
+// MV3 background pages to be non-persistent.
+delete manifest.background.service_worker;
+manifest.background.persistent = false;
 fs.writeFileSync(path.join(out, 'manifest.json'), JSON.stringify(manifest, null, 2) + '\n');
 
 const zip = path.join(root, 'dist', `stable-captions-safari-${manifest.version}.zip`);

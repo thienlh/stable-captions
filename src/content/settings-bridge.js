@@ -85,6 +85,7 @@
     DEFAULTS, SIZES, SIZE_LABELS, WINDOWS, STYLES, STYLE_LABELS, windowLabel, sizeMigration, highlightSetting,
   } = globalThis.YTSC.Settings;
   const ATTRS = {
+    enabled: 'ytscEnabled',
     style: 'ytscStyle',
     size: 'ytscSize',
     clean: 'ytscClean',
@@ -103,14 +104,17 @@
     }
   };
 
-  apply(DEFAULTS);
+  // Every look setting starts at its default. The master switch does not: until it
+  // is read, main.js waits, so a viewer who switched off never sees our captions flash.
+  const { enabled, ...looks } = DEFAULTS;
+  apply(looks);
   // Promise form works in both Chrome (MV3) and Safari. A size saved on the old
   // ladder is moved first, so it keeps looking the same.
   store.get(['size', 'sizeLadder'])
     .then((raw) => { const patch = sizeMigration(raw); return patch && store.set(patch); })
     .catch(() => {})
     .then(() => store.get(DEFAULTS))
-    .then(apply, () => {});
+    .then(apply, () => apply({ enabled })); // storage failed: on, as before the switch existed
   api.storage.onChanged.addListener((changes, area) => {
     if (area !== 'sync' && area !== 'local') return;
     if (area === 'local' && changes[LANGUAGE_HISTORY]) {
@@ -175,6 +179,7 @@
       const windowKey = !e.altKey && e.key === 'w' && !e.shiftKey;
       const highlightKey = !e.altKey && e.key === 'h' && !e.shiftKey;
       if (!delta && !cleanKey && !windowKey && !highlightKey && !styleKey) return;
+      if (!current.enabled) return; // switched off in the popup: the keys stay YouTube's
       if (isTyping(e.target) || !captionsShowing()) return;
       e.preventDefault();
       e.stopImmediatePropagation();

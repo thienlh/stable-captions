@@ -53,6 +53,7 @@
   --glass: color-mix(in srgb, var(--bg) 52%, transparent);
   --line: rgba(var(--ink-rgb), 0.07);
   --spring: cubic-bezier(.34, 1.56, .64, 1);
+  --hover-tint: rgba(var(--ink-rgb), 0.05); /* see "Hover" below */
   color-scheme: light dark;
 }
 @media (color-gamut: p3) and (forced-colors: none) {
@@ -89,20 +90,46 @@ body { width: 340px; }
 button { font: inherit; color: inherit; border: 0; background: none; padding: 0; cursor: pointer; }
 button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
+/* Hover, the same on every small control (title link, TV switch, size keys,
+   panel levels): a faint tint behind it, and its face (.lift) rises 1px. */
+.lift { display: inline-block; transition: transform 260ms var(--spring); }
+:is(.title a, .status, .step, .seg button:not(.sel)):hover .lift { transform: translateY(-1px); }
+:is(.title a, .status, .seg button:not(.sel)):hover { background-color: var(--hover-tint); }
+/* The size keys are raised: the same tint, mixed into their own surface. */
+.step:hover { background-color: color-mix(in srgb, var(--raised) 95%, var(--ink)); }
+
 /* ---------- Title ---------- */
-.title { display: flex; align-items: center; justify-content: space-between; }
+/* The title and the status line share a baseline; the TV hangs from it. */
+.title { display: flex; align-items: baseline; justify-content: space-between; }
 .title h1 {
   margin: 0;
   font: 400 28px/1 "YTSC Serif", "Iowan Old Style", Georgia, serif;
   color: var(--accent-ink);
   letter-spacing: -0.01em;
 }
-/* Status: a little TV ("on the tube"). Lit with a caption on a video, a warm
-   blank screen on other YouTube pages, dark elsewhere. */
-.status { display: inline-flex; align-items: flex-end; gap: 7px; color: var(--dim); }
+/* The title links to the home page (stable.monster). The padding gives the hover
+   tint room; the negative margin keeps the text where it was. */
+.title h1 a {
+  color: inherit; text-decoration: none;
+  margin: 0 -6px; padding: 3px 6px 4px; border-radius: 10px;
+  transition: background-color 120ms;
+}
+.title h1 a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+/* Status, and the power switch: a little TV ("on the tube"). Switched on, it
+   shows the tab: lit with a caption on a video, a warm blank screen on other
+   YouTube pages, dark elsewhere. Switched off, the screen is off and the knob
+   unlit. Clicking it switches the set. */
+.status {
+  display: inline-flex; align-items: flex-end; gap: 7px;
+  margin: -4px -6px -4px 0; padding: 4px 6px 4px 8px; border-radius: 10px;
+  color: var(--dim);
+  transition: background-color 120ms;
+}
+.status:active .tv svg { transform: scale(0.95); }
 .status[hidden], .grant[hidden] { display: none; }
 #status-text {
-  padding-bottom: 3px;
+  /* Sits the text's baseline on the TV's feet line, so title, text and set line up. */
+  margin-bottom: 3px;
   font: italic 400 17px/20px "YTSC Serif", "Iowan Old Style", Georgia, serif;
   transition: color 200ms;
 }
@@ -113,15 +140,21 @@ button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
   background: radial-gradient(circle, color-mix(in srgb, var(--accent) 45%, transparent), transparent 68%);
   opacity: 0; transition: opacity 300ms;
 }
-.tv svg { position: relative; display: block; width: 100%; height: 100%; overflow: visible; color: var(--dim); transition: color 200ms; }
+.tv svg {
+  position: relative; display: block; width: 100%; height: 100%; overflow: visible; color: var(--dim);
+  transition: color 200ms, transform 260ms var(--spring);
+}
 .tv .ln { fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
 .tv .thin { stroke-width: 1.3; }
 .tv .ink { fill: currentColor; }
 .tv .body { fill: var(--raised); stroke: currentColor; stroke-width: 1.6; }
+.tv .tube { fill: #1e1f24; } /* the dark tube behind the picture, seen as it switches off */
 .tv .glass { fill: #3a3b42; transition: fill 200ms; }
 .tv .shine { fill: none; stroke: #fff; stroke-opacity: 0.35; stroke-width: 1.2; stroke-linecap: round; }
 .tv .word { fill: #fff; opacity: 0; }
 .tv .screen { transform-box: fill-box; transform-origin: center; }
+/* The knob is the power light: lit while switched on. */
+.tv .knob { fill: var(--accent); stroke: currentColor; stroke-width: 1.6; transition: fill 200ms; }
 
 .status[data-state="standby"] .glass { fill: #485c85; }
 .status[data-state="on"] { color: var(--accent-ink); }
@@ -131,6 +164,10 @@ button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .status[data-state="on"] .word { opacity: 1; animation: say 1.8s steps(1) infinite; }
 .status[data-state="on"] .w2 { animation-delay: -0.9s; }
 .status[data-state="on"] .screen { animation: crt-on 420ms ease-out; }
+.status[data-state="off"] .knob { fill: var(--raised); }
+/* Switched by a click: the set warms up, or collapses to a line and a dot. */
+.status.switching:not([data-state="off"]) .screen { animation: crt-on 420ms ease-out; }
+.status.switching[data-state="off"] .screen { animation: crt-off 360ms ease-in; }
 /* The yellow word hops along the caption, as in the Short style. */
 @keyframes say { 0% { fill: var(--ytsc-highlight-color); } 50% { fill: #fff; } }
 /* An old set warming up: a bright line that opens into the picture. */
@@ -139,8 +176,16 @@ button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
   45% { transform: scale(1, 0.04); filter: brightness(3); }
   100% { transform: none; filter: none; }
 }
+/* And switching off: the picture folds into a bright line, then a dot that fades. */
+@keyframes crt-off {
+  0% { transform: none; filter: brightness(1.6); }
+  50% { transform: scale(1, 0.04); filter: brightness(3); }
+  80% { transform: scale(0.04, 0.04); filter: brightness(3); opacity: 1; }
+  100% { transform: scale(0.04, 0.04); filter: brightness(3); opacity: 0; }
+}
 
 .grant {
+  justify-self: end; margin-top: -6px; /* under the TV, which says "needs access" */
   display: inline-flex; align-items: center; height: 24px; padding: 0 10px; border-radius: 12px;
   font-size: 11.5px; font-weight: 500;
   color: var(--accent-ink); background: color-mix(in srgb, var(--accent) 14%, transparent);
@@ -281,7 +326,7 @@ kbd {
   font: 500 15px/1 "YTSC Mono", ui-monospace, monospace;
   background: var(--raised);
   box-shadow: 0 0 0 1px rgba(var(--ink-rgb), 0.08), 0 1px 2px rgba(0, 0, 0, 0.06);
-  transition: transform 260ms var(--spring);
+  transition: background-color 120ms, transform 260ms var(--spring);
 }
 .step:active { transform: scale(0.92); }
 .bars { display: flex; align-items: flex-end; gap: 5px; height: 16px; }
@@ -302,7 +347,7 @@ kbd {
   color: color-mix(in srgb, var(--ink) 78%, transparent);
   transition: background-color 120ms, color 120ms, box-shadow 120ms;
 }
-.seg button:hover { color: var(--ink); }
+.seg button:not(.sel):hover { color: var(--ink); }
 .seg button.sel {
   font-weight: 600; color: var(--accent-ink);
   background: var(--raised);
@@ -325,6 +370,10 @@ kbd {
 }
 .switch[aria-checked="true"] { background: var(--accent); }
 .switch[aria-checked="true"]::after { transform: translateX(14px); }
+
+/* ---------- Master switch: off greys out everything it would apply ---------- */
+[data-needs-on] { transition: opacity 200ms, filter 200ms; }
+.switched-off [data-needs-on] { opacity: 0.4; filter: saturate(0); }
 
 /* ---------- Shortcut-only controls that have no settings row ---------- */
 .keys {

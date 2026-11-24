@@ -73,7 +73,10 @@
     for (const level of w.levels) {
       const b = document.createElement('button');
       b.dataset.window = level;
-      b.textContent = windowLabel(level);
+      const label = document.createElement('span');
+      label.className = 'lift'; // hover lifts the label (popup.css)
+      label.textContent = windowLabel(level);
+      b.appendChild(label);
       list.appendChild(b);
     }
   }
@@ -99,6 +102,11 @@
       b.classList.toggle('sel', sel);
       b.setAttribute('aria-pressed', String(sel));
     }
+
+    // Switched off, the style and settings stay as they are but can't be changed.
+    for (const el of document.querySelectorAll('[data-needs-on]')) el.inert = !state.enabled;
+    document.body.classList.toggle('switched-off', !state.enabled);
+    paintStatus();
 
     const highlight = state[highlightSetting(state.style)];
     $('highlight').setAttribute('aria-checked', String(highlight));
@@ -137,11 +145,28 @@
     else if (t.dataset.window) update({ [WINDOWS[state.style].key]: t.dataset.window });
     else if (t.id === 'highlight') toggleHighlight();
     else if (t.id === 'clean') update({ clean: !state.clean });
+    else if (t.id === 'status') {
+      $('status').classList.add('switching'); // plays the set turning off or on (popup.css)
+      update({ enabled: !state.enabled });
+    }
+  });
+
+  $('status').addEventListener('animationend', (e) => {
+    if (e.animationName === 'crt-on' || e.animationName === 'crt-off') $('status').classList.remove('switching');
+  });
+
+  // The title opens the home page in a new tab (tabs.create needs no permission),
+  // and the popup closes, as it does for a link in Chrome.
+  $('home').addEventListener('click', (e) => {
+    e.preventDefault();
+    const { href } = e.currentTarget; // currentTarget is null once the click is handled
+    Promise.resolve(api.tabs.create({ url: href }))
+      .then(() => window.close(), () => window.open(href, '_blank'));
   });
 
   // The same keys as on the video (minus `c`, which belongs to the player).
   document.addEventListener('keydown', (e) => {
-    if (e.ctrlKey || e.metaKey || e.repeat) return;
+    if (e.ctrlKey || e.metaKey || e.repeat || !state.enabled) return;
     if (e.altKey && !e.shiftKey && e.code === 'KeyC') {
       e.preventDefault();
       update({ style: STYLES[(STYLES.indexOf(state.style) + 1) % STYLES.length] });
@@ -190,6 +215,23 @@
     ],
   };
 
+  // The little TV in the header is the power switch. Switched on, it shows the
+  // active tab: lit with a caption on a video, warm on other supported pages, dark
+  // elsewhere. Switched off, its screen is off and its knob unlit.
+  // [look, text] for the active tab, once showStatus() knows it.
+  let pageStatus = null;
+  function paintStatus() {
+    const status = $('status');
+    status.setAttribute('aria-checked', String(state.enabled));
+    status.title = state.enabled ? 'Switch Stable Captions off' : 'Switch Stable Captions on';
+    if (!state.enabled) {
+      status.dataset.state = 'off';
+      $('status-text').textContent = 'switched off';
+    } else if (pageStatus) { // else still looking, or asking for site access
+      [status.dataset.state, $('status-text').textContent] = pageStatus;
+    }
+  }
+
   async function hasAccess(sites = VIDEO_SITES) {
     try {
       return await api.permissions.contains(sites);
@@ -205,9 +247,8 @@
     } catch { /* request refused */ }
     if (!granted) return;
     $('grant').hidden = true;
-    $('status').hidden = false;
-    $('status').dataset.state = 'standby';
-    $('status-text').textContent = 'reload page';
+    pageStatus = ['standby', 'reload page'];
+    paintStatus();
   });
 
   async function showStatus() {
@@ -222,8 +263,9 @@
     const origins = host ? [`https://${host}/*`] : VIDEO_SITES.origins;
     if (host === 'hackertube.org') origins.push('https://www.youtube-nocookie.com/*');
     if (!(await hasAccess({ origins }))) {
-      $('status').hidden = true;
       $('grant').hidden = false;
+      pageStatus = ['idle', 'needs access'];
+      paintStatus();
       return;
     }
     const onYouTube = host === 'www.youtube.com' || host === 'www.youtube-nocookie.com';
@@ -231,11 +273,10 @@
     const onVideo = /^https:\/\/www\.youtube\.com\/watch\b/.test(url)
       || /^https:\/\/www\.youtube-nocookie\.com\/embed\/[^/?#]+/.test(url)
       || /^https:\/\/hackertube\.org\/watch\/[^/?#]+/.test(url);
-    // The little TV in the header: lit with a caption on a video, warm on other
-    // supported pages, dark elsewhere.
-    const state = onVideo ? 'on' : onYouTube || onHackerTube ? 'standby' : 'off';
-    $('status').dataset.state = state;
-    $('status-text').textContent = { on: 'on the tube', standby: 'pick a video', off: "tube's off" }[state];
+    pageStatus = onVideo ? ['on', 'on the tube']
+      : onYouTube || onHackerTube ? ['standby', 'pick a video']
+        : ['idle', 'no video here'];
+    paintStatus();
   }
 
   // ---------- Start ----------
