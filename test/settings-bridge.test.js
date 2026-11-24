@@ -112,3 +112,12 @@ test('an unsuccessful stylesheet response is not inlined', async () => {
   assert.equal(documentElement.dataset.ytscStyle, 'frosted');
   assert.equal(documentElement.dataset.ytscSize, 'medium');
 });
+
+test('the master switch is published only once storage is read', async () => {
+  const { documentElement } = load({ root: 'chrome-extension://abc/', fetch: async () => ({ ok: true, text: async () => '' }), stored: { enabled: false } });
+  assert.equal(documentElement.dataset.ytscEnabled, undefined, 'main.js waits instead of assuming on');
+  assert.equal(documentElement.dataset.ytscStyle, 'frosted', 'looks start at their defaults');
+  await flush();
+  await flush();
+  assert.equal(documentElement.dataset.ytscEnabled, 'false');
+});

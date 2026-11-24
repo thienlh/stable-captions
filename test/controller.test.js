@@ -21,7 +21,7 @@ globalThis.location = {
 };
 globalThis.window = globalThis;
 globalThis.document = {
-  documentElement: { dataset: {} },
+  documentElement: { dataset: { ytscEnabled: 'true' } }, // the bridge has read the master switch
   querySelector(selector) {
     if (selector === '.ytp-subtitles-button') {
       return { getAttribute: () => page.ccPressed };
@@ -319,6 +319,140 @@ test('leaving the watch page (e.g. to the mini player) gives native captions bac
   assert.equal(controller.taps.length, 0, 'leaving the video releases raw caption bodies');
   assert.equal(globalThis.__ytscTimedtext, undefined);
   assert.ok(overlay.calls.includes('destroy'), 'removes the overlay and the native-caption hider');
+});
+
+test('switching off in the popup gives native captions back, and switching on shows them again', async () => {
+  const { controller, fetches, overlay } = makeController();
+  try {
+    await controller.onTap(tap('de'));
+    globalThis.__ytscTimedtext = tap('de');
+    assert.equal(shown(controller), 'tapped-de');
+
+    document.documentElement.dataset.ytscEnabled = 'false';
+    overlay.calls.length = 0;
+    await controller.reload(); // what the <html> attribute observer does
+    assert.equal(controller.mode, 'off');
+    assert.equal(shown(controller), '');
+    assert.ok(overlay.calls.includes('destroy'), 'removes the overlay and the native-caption hider');
+    assert.equal(controller.taps.length, 1, "keeps this video's download");
+
+    // A download while off (e.g. a language picked in YouTube's menu) is kept, not shown.
+    await controller.onTap(tap('fr'));
+    globalThis.__ytscTimedtext = tap('fr');
+    assert.equal(controller.mode, 'off');
+    assert.ok(!overlay.calls.includes('mount'));
+
+    document.documentElement.dataset.ytscEnabled = 'true';
+    await controller.reload();
+    await settle();
+    assert.equal(shown(controller), 'tapped-fr', "back on with the player's latest download");
+    assert.equal(fetches.length, 0);
+  } finally {
+    document.documentElement.dataset.ytscEnabled = 'true';
+  }
+});
+
+test('a video opened while switched off leaves native captions alone', async () => {
+  const { controller, fetches, overlay } = makeController();
+  document.documentElement.dataset.ytscEnabled = 'false';
+  try {
+    await controller.reload();
+    await settle();
+    assert.equal(controller.mode, 'off');
+    assert.equal(fetches.length, 0, 'fetches nothing');
+    assert.ok(!overlay.calls.includes('mount'));
+  } finally {
+    document.documentElement.dataset.ytscEnabled = 'true';
+  }
+});
+
+test('switching back on shows the download that was showing, not the newest one', async () => {
+  const { controller } = makeController();
+  try {
+    await controller.onTap(tap('de'));
+    await controller.onTap(tap('fr'));
+    globalThis.__ytscTimedtext = tap('fr');
+    // Shift+L back to German, answered from the player's cache: no new download.
+    await controller.loadFromTap(controller.taps.find((t) => t.lang === 'de'));
+    assert.equal(shown(controller), 'tapped-de');
+
+    document.documentElement.dataset.ytscEnabled = 'false';
+    await controller.reload();
+    document.documentElement.dataset.ytscEnabled = 'true';
+    await controller.reload();
+    assert.equal(shown(controller), 'tapped-de', 'matches what YouTube shows');
+  } finally {
+    document.documentElement.dataset.ytscEnabled = 'true';
+  }
+});
+
+test('switching back on shows the kept download even before the player lists its tracks', async () => {
+  const { controller } = makeController({ tracksAfter: 1000 });
+  try {
+    await controller.onTap(tap('de'));
+    document.documentElement.dataset.ytscEnabled = 'false';
+    await controller.reload();
+    document.documentElement.dataset.ytscEnabled = 'true';
+    await controller.reload();
+    assert.equal(controller.mode, 'timeline');
+    assert.equal(shown(controller), 'tapped-de');
+  } finally {
+    document.documentElement.dataset.ytscEnabled = 'true';
+  }
+});
+
+test("navigating while switched off drops the previous video's downloads", async () => {
+  const { controller } = makeController();
+  try {
+    await controller.onTap(tap('de'));
+    globalThis.__ytscTimedtext = tap('de');
+    document.documentElement.dataset.ytscEnabled = 'false';
+    await controller.reload();
+    assert.equal(controller.taps.length, 1, 'kept for this video');
+    watch('B');
+    await controller.reload();
+    assert.equal(controller.taps.length, 0);
+    assert.equal(globalThis.__ytscTimedtext, undefined);
+  } finally {
+    document.documentElement.dataset.ytscEnabled = 'true';
+  }
+});
+
+test("a caption language picked in YouTube's menu while switched off is not learned", async () => {
+  const { controller } = makeController();
+  const reported = [];
+  controller.reportManualLanguage = (language) => reported.push(language);
+  let armed = false;
+  controller.captionMenuLabel = () => { armed = true; return 'French'; };
+  try {
+    document.documentElement.dataset.ytscEnabled = 'false';
+    await controller.reload();
+    controller.onCaptionMenuEvent({ isTrusted: true, type: 'click', target: {} });
+    assert.equal(armed, false, 'the menu click is not even looked at');
+    controller.captionChoiceAt = Date.now(); // even if armed before switching off
+    controller.notePlayerTrackChoice({ languageCode: 'fr' });
+    assert.deepEqual(reported, []);
+  } finally {
+    document.documentElement.dataset.ytscEnabled = 'true';
+  }
+});
+
+test('nothing starts until the master switch is read from storage', async () => {
+  const { controller, fetches, overlay } = makeController();
+  try {
+    delete document.documentElement.dataset.ytscEnabled; // the bridge is still reading
+    await controller.reload();
+    await controller.onTap(tap('de'));
+    await settle();
+    assert.equal(fetches.length, 0);
+    assert.ok(!overlay.calls.includes('mount'), 'native captions are never replaced');
+
+    document.documentElement.dataset.ytscEnabled = 'true'; // read: on
+    await controller.reload();
+    assert.equal(shown(controller), 'tapped-de', 'then shows the download kept meanwhile');
+  } finally {
+    document.documentElement.dataset.ytscEnabled = 'true';
+  }
 });
 
 test('a video without caption tracks gives native captions back', async () => {

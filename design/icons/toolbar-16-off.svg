@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="16" height="16">
+  <!-- toolbar-16.svg while switched off: struck through, with a gap around the slash. -->
+  <defs>
+    <mask id="cut">
+      <rect width="16" height="16" fill="#fff"/>
+      <path d="M2.5 2 13.5 14" stroke="#000" stroke-width="3.2" stroke-linecap="round"/>
+    </mask>
+  </defs>
+  <g mask="url(#cut)">
+    <path d="M4.5 7.5a3.5 3.5 0 0 1 7 0" fill="none" stroke="#000" stroke-width="1"/>
+    <rect x="1" y="7" width="14" height="1"/>
+    <rect x="2" y="10" width="7" height="2" rx="1"/>
+    <rect x="10" y="10" width="4" height="2" rx="1" opacity="0.45"/>
+  </g>
+  <path d="M2.5 2 13.5 14" stroke="#000" stroke-width="1.1" stroke-linecap="round"/>
+</svg>

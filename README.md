@@ -48,7 +48,8 @@ remove the flowing-text distraction.
 - `src/content/settings-bridge.js` — popup settings + local language learning → `<html>`, font registration (isolated world)
 - `src/core/settings.js` — settings vocabulary (keys, defaults, sizes, levels, labels) shared by popup and bridge
 - `src/core/language-preference.js` — latest-choice, local-only language preference model
-- `src/popup/` — toolbar popup: every style previewed live, size, background, clean verbatim
+- `src/popup/` — toolbar popup: the TV in the header switches it on/off; every style previewed live, size, background, clean verbatim
+- `src/background.js` — toolbar icon follows the on/off switch (`icons/*-off.png`)
 - `src/content/main.js` — composition root (`StableCaptionsController`)
 
 Core files attach to `globalThis.YTSC` and also export via CommonJS, so the
@@ -192,7 +193,14 @@ itself) into the extension's resources. Regenerate only if files are added or re
 The Safari build differs only in its toolbar icon: a monochrome glyph
 (`icons/toolbar-*.png`, source in `design/icons/toolbar.svg`) that Safari renders as a
 template image — grey normally, accent-tinted when the extension can run on the tab.
-Chrome and Firefox keep the colour icon. The zip is for App Store Connect's packager.
+Chrome and Firefox keep the colour icon. Switched off in the popup (click the TV), the toolbar shows
+`*-off.png` instead: the glyph with a slash on Safari (`design/icons/toolbar-off.svg`),
+a greyed colour icon elsewhere. The zip is for App Store Connect's packager.
+
+The popup's title links to stable.monster, which has a Ko-fi tip button. If App Review
+rejects a build for that (guideline 3.1.1, tips outside in-app purchase), link the
+Safari build to `https://stable.monster/?from=safari` and hide the tip button on the
+site for that parameter.
 
 1. Xcode opens the generated project → **Run** (⌘R); a small host app launches
 2. Safari → Settings → Advanced → **Show features for web developers**
