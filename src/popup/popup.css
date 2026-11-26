@@ -42,7 +42,7 @@
 
 :root {
   --ytsc-highlight-color: #ffe135;
-  --ytsc-pink-highlight-color: #ff5cad; /* Short on Safari (styles.css) */
+  --ytsc-pink-highlight-color: #e283a5; /* Short on Safari (styles.css) */
   --accent: #7e9cd8; /* Kanagawa */
   --accent-ink: #5f7fc2; /* same hue, deep enough for text on the light background */
   --bg: #fbfaf8;
@@ -59,10 +59,7 @@
 }
 @media (color-gamut: p3) and (forced-colors: none) {
   @supports (color: color(display-p3 1 1 0)) {
-    :root {
-      --ytsc-highlight-color: color(display-p3 1 0.883 0.152);
-      --ytsc-pink-highlight-color: color(display-p3 1 0.284 0.679);
-    }
+    :root { --ytsc-highlight-color: color(display-p3 1 0.883 0.152); }
   }
 }
 @media (prefers-color-scheme: dark) {

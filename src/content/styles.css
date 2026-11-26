@@ -26,10 +26,11 @@
   --ytsc-font: max(var(--ytsc-font-floor), calc(var(--ytsc-player-h, 500px) * var(--ytsc-size)));
   --ytsc-highlight-color: #ffe135;
   --ytsc-hdr-highlight-color: #ffed76;
-  /* Short's neon pink (Safari only, html[data-ytsc-tiktok-color="pink"]), after the
-     pink of a Vice City mission briefing. */
-  --ytsc-pink-highlight-color: #ff5cad;
-  --ytsc-hdr-pink-highlight-color: #ff8cc6;
+  /* Short's pink (Safari only, html[data-ytsc-tiktok-color="pink"]): the rose of
+     a Vice City mission briefing, sampled from the game. A muted pink, so it gets
+     no wider-gamut boost below; HDR only lifts its lightness. */
+  --ytsc-pink-highlight-color: #e283a5;
+  --ytsc-hdr-pink-highlight-color: #f695b7;
   position: absolute;
   left: 50%;
   --ytsc-bottom-ratio: 0.08;
@@ -128,14 +129,12 @@ html[data-ytsc-boring-window="100"] { --ytsc-boring-alpha: 1; }
   transition: opacity 90ms linear, text-shadow 90ms linear;
 }
 
-/* Extend each highlight's chroma in Display P3 at the same OKLCH lightness and hue. */
+/* Extend each yellow's chroma in Display P3 at the same OKLCH lightness and hue. */
 @media (color-gamut: p3) and (forced-colors: none) {
   @supports (color: color(display-p3 1 1 0)) {
     #ytsc-overlay {
       --ytsc-highlight-color: color(display-p3 1 0.883 0.152);
       --ytsc-hdr-highlight-color: color(display-p3 1 0.932 0.449);
-      --ytsc-pink-highlight-color: color(display-p3 1 0.284 0.679);
-      --ytsc-hdr-pink-highlight-color: color(display-p3 1 0.511 0.782);
     }
   }
 }

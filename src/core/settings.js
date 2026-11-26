@@ -53,10 +53,10 @@
   const highlightSetting = (style) => (style === 'boring' ? 'boringHighlight' : 'highlight');
 
   // Colour of Short's highlighted word. Safari only (the paid build): it starts out a
-  // neon pink and can go back to yellow. Elsewhere Short is always yellow, whatever is
+  // Vice City pink and can go back to yellow. Elsewhere Short is always yellow, whatever is
   // stored, so the bridge and the popup ignore this setting there.
   const TIKTOK_COLORS = ['pink', 'yellow'];
-  const TIKTOK_COLOR_LABELS = { pink: 'Neon pink', yellow: 'Yellow' };
+  const TIKTOK_COLOR_LABELS = { pink: 'Pink', yellow: 'Yellow' };
   // Safari's extension pages and content scripts both see this scheme.
   const isSafari = (api) => String(api?.runtime?.getURL?.('') ?? '').startsWith('safari-');
 
