@@ -26,6 +26,10 @@
   --ytsc-font: max(var(--ytsc-font-floor), calc(var(--ytsc-player-h, 500px) * var(--ytsc-size)));
   --ytsc-highlight-color: #ffe135;
   --ytsc-hdr-highlight-color: #ffed76;
+  /* Short's neon pink (Safari only, html[data-ytsc-tiktok-color="pink"]), after the
+     pink of a Vice City mission briefing. */
+  --ytsc-pink-highlight-color: #ff5cad;
+  --ytsc-hdr-pink-highlight-color: #ff8cc6;
   position: absolute;
   left: 50%;
   --ytsc-bottom-ratio: 0.08;
@@ -124,12 +128,14 @@ html[data-ytsc-boring-window="100"] { --ytsc-boring-alpha: 1; }
   transition: opacity 90ms linear, text-shadow 90ms linear;
 }
 
-/* Extend each yellow's chroma in Display P3 at the same OKLCH lightness and hue. */
+/* Extend each highlight's chroma in Display P3 at the same OKLCH lightness and hue. */
 @media (color-gamut: p3) and (forced-colors: none) {
   @supports (color: color(display-p3 1 1 0)) {
     #ytsc-overlay {
       --ytsc-highlight-color: color(display-p3 1 0.883 0.152);
       --ytsc-hdr-highlight-color: color(display-p3 1 0.932 0.449);
+      --ytsc-pink-highlight-color: color(display-p3 1 0.284 0.679);
+      --ytsc-hdr-pink-highlight-color: color(display-p3 1 0.511 0.782);
     }
   }
 }
@@ -141,6 +147,7 @@ html[data-ytsc-boring-window="100"] { --ytsc-boring-alpha: 1; }
   .html5-video-player:has(.ytp-hdr-quality-badge) #ytsc-overlay {
     --ytsc-word-opacity: 0.88;
     --ytsc-highlight-color: var(--ytsc-hdr-highlight-color);
+    --ytsc-pink-highlight-color: var(--ytsc-hdr-pink-highlight-color);
   }
 
   /* Filtering individual Short words clips the outline at the word bounds in WebKit. */
@@ -215,6 +222,12 @@ html[data-ytsc-style="tiktok"] #ytsc-overlay {
   text-shadow: none;
 }
 
+/* A variable, not a color rule: a more specific selector here would beat the
+   highlight-off rule below. Only Safari's settings-bridge.js sets this attribute. */
+html[data-ytsc-tiktok-color="pink"] #ytsc-overlay {
+  --ytsc-tiktok-highlight-color: var(--ytsc-pink-highlight-color);
+}
+
 html[data-ytsc-style="tiktok"] #ytsc-overlay.ytsc-fresh {
   animation: ytsc-pop 140ms ease-out;
 }
@@ -226,7 +239,7 @@ html[data-ytsc-style="tiktok"] #ytsc-overlay .ytsc-word {
 }
 
 html[data-ytsc-style="tiktok"] #ytsc-overlay .ytsc-word.ytsc-active {
-  color: var(--ytsc-highlight-color);
+  color: var(--ytsc-tiktok-highlight-color, var(--ytsc-highlight-color));
   transform: scale(1.08);
   text-shadow: inherit;
 }

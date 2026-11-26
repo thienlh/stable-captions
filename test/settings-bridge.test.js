@@ -121,3 +121,26 @@ test('the master switch is published only once storage is read', async () => {
   await flush();
   assert.equal(documentElement.dataset.ytscEnabled, 'false');
 });
+
+test("Short's pink highlight is Safari's: on by default there, and switchable to yellow", async () => {
+  const root = 'safari-web-extension://id/';
+  const fresh = load({ root, fetch: () => Promise.reject(new Error('unused')) });
+  assert.equal(fresh.documentElement.dataset.ytscTiktokColor, 'pink');
+  const yellow = load({ root, fetch: () => Promise.reject(new Error('unused')), stored: { tiktokColor: 'yellow' } });
+  await flush();
+  await flush();
+  assert.equal(yellow.documentElement.dataset.ytscTiktokColor, 'yellow');
+});
+
+test("Chrome and Firefox never get Short's pink, even if it was stored", async () => {
+  for (const root of ['chrome-extension://id/', 'moz-extension://id/']) {
+    const { documentElement } = load({
+      root,
+      fetch: () => Promise.resolve({ ok: true, text: () => Promise.resolve('') }),
+      stored: { tiktokColor: 'pink' },
+    });
+    await flush();
+    await flush();
+    assert.equal(documentElement.dataset.ytscTiktokColor, undefined, root);
+  }
+});
