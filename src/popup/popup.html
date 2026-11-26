@@ -76,7 +76,15 @@
           <div class="name" id="highlight-label">Highlight words <kbd>H</kbd></div>
           <div class="hint" id="highlight-hint"></div>
         </div>
-        <button class="switch" id="highlight" role="switch" aria-checked="true" aria-labelledby="highlight-label"></button>
+        <div class="controls">
+          <!-- Short's highlight colour, Safari only (popup.js shows it): two dots
+               beside the switch, while Short is picked and the highlight is on. -->
+          <div class="swatches" id="tiktok-color" role="radiogroup" aria-label="Highlight colour" hidden>
+            <button class="swatch" data-tiktok-color="pink" role="radio" aria-checked="true"></button>
+            <button class="swatch" data-tiktok-color="yellow" role="radio" aria-checked="false"></button>
+          </div>
+          <button class="switch" id="highlight" role="switch" aria-checked="true" aria-labelledby="highlight-label"></button>
+        </div>
       </div>
 
       <div class="row">

@@ -8,9 +8,14 @@
    * settings-bridge.js applies them to open video tabs.
    */
   const { Settings } = globalThis.YTSC;
-  const { DEFAULTS, STYLES, SIZES, SIZE_LABELS, WINDOWS, windowLabel, sizeMigration, highlightSetting } = Settings;
+  const {
+    DEFAULTS, STYLES, SIZES, SIZE_LABELS, WINDOWS, windowLabel, sizeMigration, highlightSetting,
+    TIKTOK_COLORS, TIKTOK_COLOR_LABELS, isSafari,
+  } = Settings;
   const api = globalThis.browser ?? globalThis.chrome;
   const store = api.storage.sync ?? api.storage.local; // Safari may lack sync
+  // Short's pink highlight is Safari's (the paid build); elsewhere it stays yellow.
+  const safari = isSafari(api);
 
   const state = { ...DEFAULTS };
   const $ = (id) => document.getElementById(id);
@@ -52,6 +57,13 @@
     }
   }
   const previews = [...document.querySelectorAll('[data-preview]')].map((el) => new Preview(el));
+
+  // Only the dots: <body> carries data-tiktok-color too (see render).
+  const swatches = [...$('tiktok-color').querySelectorAll('.swatch')];
+  for (const b of swatches) {
+    b.title = TIKTOK_COLOR_LABELS[b.dataset.tiktokColor];
+    b.setAttribute('aria-label', b.title);
+  }
 
   // ---------- Rendering ----------
 
@@ -110,8 +122,18 @@
 
     const highlight = state[highlightSetting(state.style)];
     $('highlight').setAttribute('aria-checked', String(highlight));
-    $('highlight-hint').textContent = highlight ? 'Mark the word being spoken' : 'Show each caption plainly';
+    $('highlight-hint').textContent = highlight ? 'Mark the spoken word' : 'Show each caption plainly';
     $('clean').setAttribute('aria-checked', String(state.clean));
+
+    // Short's colour: the previews and the TV's hopping word follow it (popup.css).
+    const tiktokColor = safari && TIKTOK_COLORS.includes(state.tiktokColor) ? state.tiktokColor : 'yellow';
+    document.body.dataset.tiktokColor = tiktokColor;
+    $('tiktok-color').hidden = !(safari && state.style === 'tiktok' && highlight);
+    for (const b of swatches) {
+      const picked = b.dataset.tiktokColor === tiktokColor;
+      b.setAttribute('aria-checked', String(picked));
+      b.tabIndex = picked ? 0 : -1; // a radio group is one Tab stop: the picked dot
+    }
 
     previews.forEach((p) => p.apply());
   }
@@ -143,12 +165,25 @@
     if (t.dataset.style) update({ style: t.dataset.style });
     else if (t.dataset.sizeStep) stepSize(Number(t.dataset.sizeStep));
     else if (t.dataset.window) update({ [WINDOWS[state.style].key]: t.dataset.window });
+    else if (t.dataset.tiktokColor) update({ tiktokColor: t.dataset.tiktokColor });
     else if (t.id === 'highlight') toggleHighlight();
     else if (t.id === 'clean') update({ clean: !state.clean });
     else if (t.id === 'status') {
       $('status').classList.add('switching'); // plays the set turning off or on (popup.css)
       update({ enabled: !state.enabled });
     }
+  });
+
+  // A radio group: the arrow keys move the pick (and focus) to the next dot, wrapping.
+  const ARROWS = { ArrowRight: 1, ArrowDown: 1, ArrowLeft: -1, ArrowUp: -1 };
+  $('tiktok-color').addEventListener('keydown', (e) => {
+    const step = ARROWS[e.key];
+    const i = swatches.indexOf(e.target);
+    if (!step || i < 0) return;
+    e.preventDefault();
+    const next = swatches[(i + step + swatches.length) % swatches.length];
+    update({ tiktokColor: next.dataset.tiktokColor });
+    next.focus();
   });
 
   $('status').addEventListener('animationend', (e) => {

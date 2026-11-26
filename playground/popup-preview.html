@@ -4,9 +4,13 @@
 <body>
 <script>
   // ?size=<name> pretends that size was saved by an older version (before the size ladder moved).
+  // ?style=<key> and ?tiktokColor=<pink|yellow> pretend those were saved.
+  // ?browser=safari runs it as Safari's popup (Short's highlight colour shows).
+  const params = new URLSearchParams(location.search);
   const mem = {};
-  if (new URLSearchParams(location.search).get('size')) mem.size = new URLSearchParams(location.search).get('size');
+  for (const key of ['size', 'style', 'tiktokColor']) if (params.get(key)) mem[key] = params.get(key);
   globalThis.chrome = {
+    runtime: { getURL: (file) => `${params.get('browser') === 'safari' ? 'safari-web-extension' : 'chrome-extension'}://preview/${file}` },
     storage: {
       local: {
         // Like chrome.storage: an object of defaults, or a list of keys (raw, no defaults).
