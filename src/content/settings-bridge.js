@@ -82,7 +82,7 @@
   }
 
   const {
-    DEFAULTS, SIZES, SIZE_LABELS, WINDOWS, STYLES, STYLE_LABELS, windowLabel, sizeMigration, highlightSetting,
+    DEFAULTS, SIZES, SIZE_LABELS, WINDOWS, STYLES, STYLE_LABELS, windowLabel, sizeMigration, highlightSetting, isSafari,
   } = globalThis.YTSC.Settings;
   const ATTRS = {
     enabled: 'ytscEnabled',
@@ -94,7 +94,11 @@
     frostedWindow: 'ytscFrostedWindow',
     tiktokWindow: 'ytscTiktokWindow',
     boringWindow: 'ytscBoringWindow',
+    tiktokColor: 'ytscTiktokColor',
   };
+  // Short's pink is a Safari gift: elsewhere the attribute is never set, so styles.css
+  // keeps the yellow.
+  if (!isSafari(api)) delete ATTRS.tiktokColor;
   const current = { ...DEFAULTS };
   const apply = (settings) => {
     for (const [key, attr] of Object.entries(ATTRS)) {

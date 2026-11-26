@@ -85,3 +85,14 @@ test('Boring shows every word at full contrast in the system font, with its own 
   assert.equal(Settings.highlightSetting('frosted'), 'highlight');
   assert.equal(Settings.highlightSetting('tiktok'), 'highlight');
 });
+
+test("Short's pink is a variable, so the highlight-off rule still wins", () => {
+  assert.ok(Settings.TIKTOK_COLORS.includes(Settings.DEFAULTS.tiktokColor));
+  assert.equal(Settings.DEFAULTS.tiktokColor, 'pink');
+  assert.match(css, /html\[data-ytsc-tiktok-color="pink"\] #ytsc-overlay \{\s*--ytsc-tiktok-highlight-color: var\(--ytsc-pink-highlight-color\);/);
+  assert.doesNotMatch(css, /data-ytsc-tiktok-color="pink"\][^{]*\.ytsc-word/, 'no color rule that outranks highlight off');
+  assert.match(css, /--ytsc-pink-highlight-color: var\(--ytsc-hdr-pink-highlight-color\)/, 'HDR lifts the pink too');
+  assert.equal(Settings.isSafari({ runtime: { getURL: () => 'safari-web-extension://id/' } }), true);
+  assert.equal(Settings.isSafari({ runtime: { getURL: () => 'chrome-extension://id/' } }), false);
+  assert.equal(Settings.isSafari(undefined), false);
+});
