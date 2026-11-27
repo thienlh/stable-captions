@@ -359,7 +359,7 @@ kbd {
 }
 
 /* Short's highlight colour (Safari): two dots beside the switch. The picked one
-   wears a ring, as the picked style card does. */
+   wears an accent ring, as the picked style card does. */
 .controls { display: flex; align-items: center; gap: 12px; }
 .swatches { display: flex; gap: 6px; }
 .swatches[hidden] { display: none; }
@@ -372,7 +372,7 @@ kbd {
 .swatch[data-tiktok-color="yellow"] { background: var(--ytsc-highlight-color); }
 .swatch:hover { transform: scale(1.12); }
 .swatch:active { transform: scale(0.92); }
-.swatch[aria-checked="true"] { box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.12), 0 0 0 2px var(--bg), 0 0 0 3.5px var(--ink); }
+.swatch[aria-checked="true"] { box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.12), 0 0 0 2px var(--bg), 0 0 0 4px var(--accent); }
 
 /* Clean verbatim's level: two more dots in the same .swatches row, sized and picked
    like the colour dots. Clean is a soft mint with one sparkle; squeaky clean is a
