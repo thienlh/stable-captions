@@ -40,7 +40,7 @@ remove the flowing-text distraction.
 - `src/core/json3-parser.js` — JSON3 → stable cues (rollup + streaming paths)
 - `src/core/cue-lookup.js` — binary-search `cueAtTime`
 - `src/core/chunker.js` — timed words → short chunks (batch + live)
-- `src/core/disfluency.js` — clean verbatim: drop fillers (en/de/vi) and repeats, `[Music]` → ♪, repair punctuation/timing
+- `src/core/disfluency.js` — clean verbatim: drop fillers (en/de/vi) and repeats, `[Music]` → ♪ (strict: every `[…]` sound tag dropped), repair punctuation/timing
 - `src/content/timedtext-tap.js` — captures the player's caption response
 - `src/content/live-source.js` — caption DOM → new words → live chunks
 - `src/content/track-provider.js` — track discovery + `fmt=json3` fetch
@@ -100,6 +100,12 @@ punctuation and capitals onto neighbouring words and absorbs the dropped time so
 split on fake pauses. YouTube's `[Music]` tags (`[Musik]`, `[âm nhạc]`, …) become a standalone
 ♪ chunk, merged when consecutive; other tags like `[Applause]` stay. In live mode it works per
 chunk, so repeats spanning two chunks remain.
+
+**Strict**, "squeaky clean" (popup: the sparkly aqua dot beside the clean verbatim switch; the mint one is the default level) goes further: every sound tag
+YouTube's auto-captions insert (`[Applause]`, `[Laughter]`, `[Music]`, `[snorts]`, …, up to six
+words) is dropped, so only speech is left; no ♪ either. A tag's sentence stop stays on the word
+before it, and its time is left as a gap (the pause is real). `[ __ ]`, YouTube's bleeped swear
+word, is kept.
 Known rough edge: legitimate doubles (*that that*).
 
 ## Popup

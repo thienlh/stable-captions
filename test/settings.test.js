@@ -37,6 +37,7 @@ test('defaults are valid values, with clean verbatim on', () => {
   assert.ok(Settings.WINDOWS.tiktok.levels.includes(d.tiktokWindow));
   assert.ok(Settings.WINDOWS.boring.levels.includes(d.boringWindow));
   assert.equal(d.clean, true);
+  assert.equal(d.cleanStrict, false, 'strict cleaning is opt-in');
   assert.equal(d.highlight, true);
   assert.equal(d.boringHighlight, false, 'Boring starts plain');
   assert.equal(Settings.STYLE_LABELS.tiktok, 'Short');

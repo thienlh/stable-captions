@@ -27,10 +27,14 @@
     'và', 'hoặc', 'nhưng',
   ]);
 
+  // Longest "[…]" sound tag strict cleaning looks for ("[indistinct chatter in the background]").
+  const MAX_TAG_WORDS = 6;
+
   /**
    * "Clean verbatim" captions: drops fillers (um, uh, äh, ờ…) and stumbles
    * ("I I I think", "It's, um, it's"), the way subtitle guidelines ask, and
-   * turns "[Music]" tags into a standalone ♪.
+   * turns "[Music]" tags into a standalone ♪. Strict cleaning drops every sound
+   * tag instead ("[Applause]", "[Laughter]", "[Music]"…), leaving only speech.
    * Works on timed words { text, startMs, endMs }. Pure, no DOM.
    * Single responsibility: disfluency detection and removal.
    */
@@ -102,10 +106,34 @@
       return out;
     }
 
-    /** Index of the word closing a "[…]" tag that starts at i (max 3 words), or -1. */
-    _bracketEnd(words, i) {
+    /**
+     * Without "[Applause]", "[Laughter]", "[Music]" and other sound tags. A tag's
+     * terminal punctuation stays on the word before it; its time is not absorbed (the
+     * pause is real). "[ __ ]" is YouTube's bleeped swear word, not a sound: it stays.
+     */
+    dropSoundTags(words) {
+      const out = [];
+      for (let i = 0; i < words.length; i++) {
+        const end = this._bracketEnd(words, i, MAX_TAG_WORDS);
+        const inner = end < 0 ? '' : words.slice(i, end + 1).map((w) => w.text).join(' ');
+        if (!/\p{L}/u.test(inner)) {
+          out.push(words[i]);
+          continue;
+        }
+        const terminal = words[end].text.match(/\]([.!?…]+)$/u)?.[1];
+        const prev = out[out.length - 1];
+        if (terminal && prev && !prev.standalone && !/[.!?…,;:]["'»”’)]*$/u.test(prev.text)) {
+          out[out.length - 1] = { ...prev, text: prev.text + terminal };
+        }
+        i = end;
+      }
+      return out;
+    }
+
+    /** Index of the word closing a "[…]" tag that starts at i (max `span` words), or -1. */
+    _bracketEnd(words, i, span = 3) {
       if (!words[i].text.startsWith('[')) return -1;
-      for (let j = i; j < Math.min(words.length, i + 3); j++) {
+      for (let j = i; j < Math.min(words.length, i + span); j++) {
         if (/\][.,!?…]*$/u.test(words[j].text)) return j;
       }
       return -1;
@@ -118,9 +146,10 @@
      * previous word absorbs the dropped time (so no fake pause splits chunks).
      * Unchanged words are shared with the input; repaired words are cloned on
      * demand so a typical clean track does not duplicate every word object.
+     * strict: also drop every sound tag, "[Music]" included (see dropSoundTags).
      */
-    clean(words) {
-      words = this.replaceMusicTags(words);
+    clean(words, { strict = false } = {}) {
+      words = strict ? this.dropSoundTags(words) : this.replaceMusicTags(words);
       const kinds = this.detect(words);
       const out = [];
       const owned = new WeakSet(); // clones made here; safe to repair again later

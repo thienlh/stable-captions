@@ -89,6 +89,7 @@
     style: 'ytscStyle',
     size: 'ytscSize',
     clean: 'ytscClean',
+    cleanStrict: 'ytscCleanStrict',
     highlight: 'ytscHighlight',
     boringHighlight: 'ytscBoringHighlight',
     frostedWindow: 'ytscFrostedWindow',
@@ -194,7 +195,10 @@
       }
       if (cleanKey) {
         const on = !current.clean;
-        setting('clean', on, on ? 'Clean captions: on (no um, uh, repeats)' : 'Clean captions: off');
+        const message = !on ? 'Clean captions: off'
+          : current.cleanStrict ? 'Clean captions: strict (no um, uh, repeats, [sound tags])'
+            : 'Clean captions: on (no um, uh, repeats)';
+        setting('clean', on, message);
         return;
       }
       if (highlightKey) {

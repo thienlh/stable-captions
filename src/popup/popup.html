@@ -90,9 +90,31 @@
       <div class="row">
         <div class="label">
           <div class="name" id="clean-label">Clean verbatim <kbd>⇧C</kbd></div>
-          <div class="hint">Hide um, uh and “I I I” stumbles</div>
+          <div class="hint" id="clean-hint"></div>
         </div>
-        <button class="switch" id="clean" role="switch" aria-checked="false" aria-labelledby="clean-label"></button>
+        <div class="controls">
+          <!-- How clean, two soap dots beside the switch while clean verbatim is on (popup.js):
+               one sparkle hides fillers and stumbles; squeaky clean (a sparkle cluster
+               and a bubble) also hides [sound tags]. -->
+          <div class="levels" id="clean-level" role="radiogroup" aria-label="How clean" hidden>
+            <button class="level" data-clean-level="light" role="radio" aria-checked="true"
+              title="Clean: no um, uh or stumbles" aria-label="Clean">
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <g transform="translate(4.5 4.5) scale(.625)"><path class="spark s1" d="M12 1.5c.7 5.6 3.4 9.3 10.5 10.5-7.1 1.2-9.8 4.9-10.5 10.5C11.3 16.9 8.6 13.2 1.5 12 8.6 10.8 11.3 7.1 12 1.5Z"/></g>
+              </svg>
+            </button>
+            <button class="level" data-clean-level="strict" role="radio" aria-checked="false"
+              title="Squeaky clean: no [Applause] or [Music] either" aria-label="Squeaky clean">
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <circle class="bubble" cx="8" cy="16.5" r="2.6"/>
+                <g transform="translate(7.5 2.5) scale(.55)"><path class="spark s1" d="M12 1.5c.7 5.6 3.4 9.3 10.5 10.5-7.1 1.2-9.8 4.9-10.5 10.5C11.3 16.9 8.6 13.2 1.5 12 8.6 10.8 11.3 7.1 12 1.5Z"/></g>
+                <g transform="translate(2.9 3.4) scale(.26)"><path class="spark s2" d="M12 1.5c.7 5.6 3.4 9.3 10.5 10.5-7.1 1.2-9.8 4.9-10.5 10.5C11.3 16.9 8.6 13.2 1.5 12 8.6 10.8 11.3 7.1 12 1.5Z"/></g>
+                <g transform="translate(14.6 14.6) scale(.24)"><path class="spark s3" d="M12 1.5c.7 5.6 3.4 9.3 10.5 10.5-7.1 1.2-9.8 4.9-10.5 10.5C11.3 16.9 8.6 13.2 1.5 12 8.6 10.8 11.3 7.1 12 1.5Z"/></g>
+              </svg>
+            </button>
+          </div>
+          <button class="switch" id="clean" role="switch" aria-checked="false" aria-labelledby="clean-label"></button>
+        </div>
       </div>
     </section>
 

@@ -96,12 +96,12 @@
         const changed = (name) => records.some((r) => r.attributeName === name);
         if (changed('data-ytsc-enabled')) this.reload(); // switched off, or back on
         if (changed('data-ytsc-style')) this.followStyle();
-        if (changed('data-ytsc-clean') || changed('data-ytsc-style')) this.rechunk();
+        if (['data-ytsc-clean', 'data-ytsc-clean-strict', 'data-ytsc-style'].some(changed)) this.rechunk();
         if (records.some((r) => r.target.matches?.('.ytp-subtitles-button'))) this.renderNow();
       }).observe(document.documentElement, {
         attributes: true,
         subtree: true,
-        attributeFilter: ['data-ytsc-enabled', 'data-ytsc-clean', 'data-ytsc-style', 'aria-pressed'],
+        attributeFilter: ['data-ytsc-enabled', 'data-ytsc-clean', 'data-ytsc-clean-strict', 'data-ytsc-style', 'aria-pressed'],
       });
       this.reload();
     }
@@ -117,6 +117,11 @@
 
     cleanEnabled() {
       return document.documentElement.dataset.ytscClean === 'true';
+    }
+
+    /** Options for Disfluency.clean: strict also drops "[Applause]"-style sound tags. */
+    cleanOptions() {
+      return { strict: document.documentElement.dataset.ytscCleanStrict === 'true' };
     }
 
     /**
@@ -141,7 +146,7 @@
     }
 
     buildChunks(words) {
-      return this.chunker.build(this.cleanEnabled() ? this.disfluency.clean(words) : words);
+      return this.chunker.build(this.cleanEnabled() ? this.disfluency.clean(words, this.cleanOptions()) : words);
     }
 
     rechunk() {
@@ -953,7 +958,7 @@
           }
           // Live chunks are cleaned one at a time (repeats spanning two chunks stay).
           if (this.cleanEnabled()) {
-            const words = this.disfluency.clean(chunk.words);
+            const words = this.disfluency.clean(chunk.words, this.cleanOptions());
             if (!words.length) return;
             chunk = { ...chunk, words, text: words.map((w) => w.text).join(' ') };
           }

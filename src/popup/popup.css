@@ -374,6 +374,40 @@ kbd {
 .swatch:active { transform: scale(0.92); }
 .swatch[aria-checked="true"] { box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.12), 0 0 0 2px var(--bg), 0 0 0 3.5px var(--ink); }
 
+/* Clean verbatim's level: two soap dots beside the switch, picked like the colour dots.
+   Clean is a soft mint with one sparkle; squeaky clean is a bright aqua with a cluster
+   of sparkles and a bubble, and they twinkle when it is picked. */
+.levels { display: flex; gap: 7px; }
+.levels[hidden] { display: none; }
+.level {
+  width: 22px; height: 22px; border-radius: 50%;
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.1);
+  transition: box-shadow 160ms, transform 260ms var(--spring);
+}
+.level svg { display: block; width: 100%; height: 100%; overflow: visible; }
+.level[data-clean-level="light"] { background: radial-gradient(circle at 32% 28%, #f2fffb, #a9e8d8 70%); }
+.level[data-clean-level="light"] .spark { fill: #2a9a85; }
+.level[data-clean-level="strict"] { background: radial-gradient(circle at 32% 28%, #9ff7ff, #2fc1d6 55%, #3d8fd8); }
+.level[data-clean-level="strict"] .spark { fill: #fff; }
+.level .bubble { fill: rgba(255, 255, 255, 0.28); stroke: #fff; stroke-width: 1.1; }
+.level .spark { transform-box: fill-box; transform-origin: center; }
+.level:hover { transform: scale(1.12) rotate(-8deg); }
+.level:active { transform: scale(0.92); }
+.level[aria-checked="true"] { box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.1), 0 0 0 2px var(--bg), 0 0 0 3.5px var(--ink); }
+.level[aria-checked="true"] .spark { animation: twinkle 700ms var(--spring) both; }
+.level[aria-checked="true"] .s2 { animation-delay: 90ms; }
+.level[aria-checked="true"] .s3 { animation-delay: 180ms; }
+.level[aria-checked="true"] .bubble { animation: bubble-up 900ms ease-out both; }
+@keyframes twinkle {
+  0% { scale: 0.2; rotate: -90deg; }
+  100% { scale: 1; rotate: 0deg; }
+}
+@keyframes bubble-up {
+  0% { translate: 0 4px; opacity: 0; }
+  60% { opacity: 1; }
+  100% { translate: 0 0; }
+}
+
 /* Clean verbatim: a real switch. */
 .switch {
   flex-shrink: 0;
