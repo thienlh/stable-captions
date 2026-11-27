@@ -5,7 +5,7 @@ YouTube's auto-captions scroll word by word, so you end up reading a moving line
 ## Features
 
 - **Two styles.** *Frosted* is a calm glass panel. *Short* is bold, punchy text. Pick one from the toolbar popup.
-- **Clean verbatim.** Hides fillers like *um* and *uh* and stumbles like *I I I think*. On by default.
+- **Clean verbatim.** Hides fillers like *um* and *uh* and stumbles like *I I I think*. On by default. Its *Strict* level also hides sound tags like *[Applause]* and *[Music]*.
 - **Seven text sizes** and adjustable background strength.
 - **Works on YouTube and HackerTube**, with any caption language you pick in the player.
 - **Caption languages.** Press `Shift+L` to toggle between the video's original captions and your preferred language. It starts with your browser language. A language you pick in YouTube's subtitles menu replaces it, including on the same video. Existing tracks are preferred, with YouTube auto-translate as the fallback.

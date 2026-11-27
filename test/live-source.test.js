@@ -52,3 +52,13 @@ test('live chunker closes at sentence end', () => {
   const closed = c.push(['Das', 'ist', 'fertig.', 'Und'], 0);
   assert.deepEqual(closed.map((x) => x.text), ['Das ist fertig.']);
 });
+
+test('live chunks keep a "[…]" sound tag whole, so clean verbatim can drop it', () => {
+  const live = new LiveChunker(); // five words a chunk
+  const chunks = live.push('one two three four [âm nhạc] Hello'.split(' '), 0);
+  assert.deepEqual(chunks.map((c) => c.text), ['one two three four [âm nhạc]']);
+  assert.equal(live.flush().text, 'Hello');
+  const unclosed = new LiveChunker({ maxWords: 3 });
+  const words = '[one two three four five six seven eight'.split(' ');
+  assert.ok(unclosed.push(words, 0).length, 'an unclosed "[" does not hold chunks back forever');
+});

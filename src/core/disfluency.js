@@ -27,10 +27,14 @@
     'và', 'hoặc', 'nhưng',
   ]);
 
+  // Longest "[…]" sound tag strict cleaning looks for ("[indistinct chatter in the background]").
+  const MAX_TAG_WORDS = 6;
+
   /**
    * "Clean verbatim" captions: drops fillers (um, uh, äh, ờ…) and stumbles
    * ("I I I think", "It's, um, it's"), the way subtitle guidelines ask, and
-   * turns "[Music]" tags into a standalone ♪.
+   * turns "[Music]" tags into a standalone ♪. Strict cleaning drops every sound
+   * tag instead ("[Applause]", "[Laughter]", "[Music]"…), leaving only speech.
    * Works on timed words { text, startMs, endMs }. Pure, no DOM.
    * Single responsibility: disfluency detection and removal.
    */
@@ -89,7 +93,7 @@
       for (let i = 0; i < words.length; i++) {
         const end = this._bracketEnd(words, i);
         const inner = end < 0 ? null : words.slice(i, end + 1).map((w) => w.text).join(' ');
-        const tag = inner?.replace(/^\[|\][.,!?…]*$/gu, '').trim().toLocaleLowerCase();
+        const tag = inner?.replace(/^\[|\]\p{P}*$/gu, '').trim().toLocaleLowerCase();
         if (!tag || !MUSIC_TAGS.has(tag)) {
           out.push(words[i]);
           continue;
@@ -102,11 +106,62 @@
       return out;
     }
 
-    /** Index of the word closing a "[…]" tag that starts at i (max 3 words), or -1. */
-    _bracketEnd(words, i) {
+    /**
+     * Without "[Applause]", "[Laughter]", "[Music]" and other sound tags. A tag's
+     * sentence stop stays on the word before it; its time is not absorbed (the pause
+     * is real). A tag that opened a caption cue hands that cue start to the cue's next
+     * word. "[ __ ]" is YouTube's bleeped swear word, not a sound: it stays.
+     */
+    dropSoundTags(words) {
+      return this._dropSoundTags(words).words;
+    }
+
+    /** dropSoundTags, plus the words that directly follow a dropped tag. */
+    _dropSoundTags(words) {
+      const out = [];
+      const afterTag = new WeakSet();
+      let follows = false; // the next kept word comes right after a dropped tag
+      let carryCueStart = false;
+      for (let i = 0; i < words.length; i++) {
+        const end = this._bracketEnd(words, i, MAX_TAG_WORDS);
+        const inner = end < 0 ? '' : words.slice(i, end + 1).map((w) => w.text).join(' ');
+        if (!/\p{L}/u.test(inner)) {
+          let word = words[i];
+          if (carryCueStart && !word.cueStart) word = { ...word, cueStart: true };
+          if (follows) afterTag.add(word);
+          out.push(word);
+          follows = false;
+          carryCueStart = false;
+          continue;
+        }
+        const terminal = words[end].text.match(/\]\p{P}*?([.!?…。！？]+)\p{P}*$/u)?.[1];
+        const prev = out[out.length - 1];
+        if (terminal && prev && !prev.standalone) {
+          // "Well, [Laughter]." → "Well." (replace the comma, don't drop the stop).
+          if (/[,，、](["'»”’)]*)$/u.test(prev.text)) {
+            out[out.length - 1] = { ...prev, text: prev.text.replace(/[,，、](["'»”’)]*)$/u, `${terminal}$1`) };
+          } else if (!/[.!?…;:。！？]["'»”’)]*$/u.test(prev.text)) {
+            out[out.length - 1] = { ...prev, text: prev.text + terminal };
+          }
+        }
+        if (words[i].cueStart) carryCueStart = true;
+        follows = true;
+        i = end;
+      }
+      return { words: out, afterTag };
+    }
+
+    /**
+     * Index of the word closing a "[…]" tag that starts at i (max `span` words), or -1.
+     * The first "]" decides: it closes the tag when only punctuation follows it ("]。").
+     */
+    _bracketEnd(words, i, span = 3) {
       if (!words[i].text.startsWith('[')) return -1;
-      for (let j = i; j < Math.min(words.length, i + 3); j++) {
-        if (/\][.,!?…]*$/u.test(words[j].text)) return j;
+      for (let j = i; j < Math.min(words.length, i + span); j++) {
+        const { text } = words[j];
+        if (j > i && text.startsWith('[')) return -1;
+        const close = text.indexOf(']');
+        if (close >= 0) return /^\]\p{P}*$/u.test(text.slice(close)) ? j : -1;
       }
       return -1;
     }
@@ -118,15 +173,23 @@
      * previous word absorbs the dropped time (so no fake pause splits chunks).
      * Unchanged words are shared with the input; repaired words are cloned on
      * demand so a typical clean track does not duplicate every word object.
+     * strict: also drop every sound tag, "[Music]" included (see dropSoundTags).
      */
-    clean(words) {
-      words = this.replaceMusicTags(words);
+    clean(words, { strict = false } = {}) {
+      let afterTag = null;
+      if (strict) ({ words, afterTag } = this._dropSoundTags(words));
+      else words = this.replaceMusicTags(words);
       const kinds = this.detect(words);
       const out = [];
       const owned = new WeakSet(); // clones made here; safe to repair again later
       let capitalizeNext = false;
+      // Right after a dropped sound tag the pause is real: words dropped there
+      // ("[Applause] um anyway") give the word before the tag none of their time.
+      let pauseBefore = false;
       words.forEach((word, i) => {
+        if (afterTag?.has(word)) pauseBefore = true;
         if (!this.drop.has(kinds[i])) {
+          pauseBefore = false;
           let { text } = word;
           // A ♪ cue is not a word: the capital waits for the word after it.
           if (capitalizeNext && !word.standalone) {
@@ -158,7 +221,7 @@
         } else if (kinds[i] === 'filler' && BARE_CONJ.has(this.text.comparableWord(prev.text))) {
           prev.text = prev.text.replace(/,(["'»”’)]*)$/u, '$1');
         }
-        prev.endMs = Math.max(prev.endMs, word.endMs);
+        if (!pauseBefore) prev.endMs = Math.max(prev.endMs, word.endMs);
       });
       return out;
     }

@@ -649,3 +649,22 @@ test('the parser is told whether the loaded track is auto-generated', () => {
   controller.useTimeline(payload('manual'), 'https://yt/api/timedtext?v=A&lang=en', 'test', 'tap');
   assert.deepEqual(seen, [true, false]);
 });
+
+test('cleaning that leaves no cues takes the caption on screen down', () => {
+  const { controller, overlay } = makeController();
+  const { dataset } = document.documentElement;
+  dataset.ytscClean = 'true';
+  dataset.ytscCleanStrict = 'true';
+  try {
+    controller.disfluency = { clean: () => [] }; // a "[Music]"-only track, strictly cleaned
+    controller.words = [{ text: '[Music]', startMs: 0, endMs: 1000 }];
+    controller.cues = [{ text: '♪', startMs: 0, endMs: 1000 }];
+    overlay.calls.length = 0;
+    controller.rechunk();
+    assert.deepEqual(controller.cues, []);
+    assert.deepEqual(overlay.calls, ['render:null']);
+  } finally {
+    delete dataset.ytscClean;
+    delete dataset.ytscCleanStrict;
+  }
+});

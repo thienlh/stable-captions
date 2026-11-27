@@ -132,3 +132,73 @@ test('shares unchanged words and copies only words repaired during cleaning', ()
   assert.equal(out[2], words[3]);
   assert.deepEqual(words, snapshot);
 });
+
+const strictText = (sentence) => new Disfluency().clean(timed(sentence), { strict: true }).map((w) => w.text).join(' ');
+
+test('strict cleaning drops every sound tag, [Music] included', () => {
+  assert.equal(strictText('[Applause] Thank you so much'), 'Thank you so much');
+  assert.equal(strictText('that was great [Laughter] anyway'), 'that was great anyway');
+  assert.equal(strictText('[Music] So, um, today we'), 'So today we', 'no ♪ in strict mode');
+  assert.equal(strictText('[Musik] [Applaus] Also, äh, ich'), 'Also, ich');
+  assert.equal(strictText('[âm nhạc] Xin chào'), 'Xin chào', 'multi-word tag');
+  assert.equal(strictText('[indistinct chatter in the background] hi'), 'hi', 'long tag');
+});
+
+test('strict cleaning keeps a tag’s stop, and bleeped words', () => {
+  assert.equal(strictText('and that was it [Laughter]. So'), 'and that was it. So');
+  assert.equal(strictText('It ended. [Applause]. Next'), 'It ended. Next');
+  assert.equal(strictText('what the [ __ ] is that'), 'what the [ __ ] is that', '"[ __ ]" is a word, not a sound');
+  assert.equal(strictText('[an unclosed bracket and many more words follow'), '[an unclosed bracket and many more words follow');
+});
+
+test('strict cleaning leaves the gap a sound tag covered, and finds repeats across it', () => {
+  const words = [
+    { text: 'Hello', startMs: 0, endMs: 300 },
+    { text: '[Applause]', startMs: 300, endMs: 4000 },
+    { text: 'everyone', startMs: 4000, endMs: 4400 },
+  ];
+  const out = new Disfluency().clean(words, { strict: true });
+  assert.deepEqual(out.map((w) => [w.text, w.startMs, w.endMs]), [['Hello', 0, 300], ['everyone', 4000, 4400]]);
+  assert.equal(strictText('I I [Laughter] I think'), 'I think');
+});
+
+test('without strict, sound tags other than [Music] stay', () => {
+  assert.equal(cleanText('[Applause] Thank you'), '[Applause] Thank you');
+});
+
+test('strict cleaning stops a tag at its first "]", even before a full-width stop', () => {
+  assert.equal(strictText('[拍手]。 ありがとう [音楽]'), 'ありがとう');
+  assert.equal(strictText('はい [拍手]。 ありがとう'), 'はい。 ありがとう');
+  assert.equal(strictText('[Applause]and more] words'), '[Applause]and more] words', 'a "]" glued to letters is no tag end');
+});
+
+test('strict cleaning turns a comma before a tag into the tag’s stop', () => {
+  assert.equal(strictText('Well, [Laughter]. Next'), 'Well. Next');
+  assert.equal(strictText('Well, [Laughter] next'), 'Well, next', 'no stop on the tag: the comma stays');
+});
+
+test('a dropped tag that opened a caption cue hands the cue start to the next word', () => {
+  const words = [
+    { text: 'First', startMs: 0, endMs: 400, estimated: true, preserveLine: true, cueStart: true },
+    { text: 'line', startMs: 400, endMs: 800, estimated: true, preserveLine: true },
+    { text: '[Applause]', startMs: 8000, endMs: 8500, estimated: true, preserveLine: true, cueStart: true },
+    { text: 'Thank', startMs: 8500, endMs: 9000, estimated: true, preserveLine: true },
+    { text: 'you', startMs: 9000, endMs: 10000, estimated: true, preserveLine: true },
+  ];
+  const out = new Disfluency().clean(words, { strict: true });
+  assert.deepEqual(out.map((w) => [w.text, Boolean(w.cueStart)]), [['First', true], ['line', false], ['Thank', true], ['you', false]]);
+  assert.deepEqual(new CaptionChunker().build(out).map((c) => c.text), ['First line', 'Thank you']);
+  assert.equal(words[3].cueStart, undefined, 'the input words are not changed');
+});
+
+test('a filler right after a dropped tag does not stretch the word before it over the pause', () => {
+  const words = [
+    { text: 'well', startMs: 0, endMs: 300 },
+    { text: '[Applause]', startMs: 300, endMs: 5300 },
+    { text: 'um', startMs: 5300, endMs: 5600 },
+    { text: 'anyway', startMs: 5600, endMs: 6000 },
+  ];
+  const out = new Disfluency().clean(words, { strict: true });
+  assert.deepEqual(out.map((w) => [w.text, w.startMs, w.endMs]), [['well', 0, 300], ['anyway', 5600, 6000]]);
+  assert.deepEqual(new CaptionChunker().build(out).map((c) => c.text), ['well', 'anyway']);
+});

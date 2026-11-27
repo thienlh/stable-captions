@@ -60,11 +60,13 @@
   // Safari's extension pages and content scripts both see this scheme.
   const isSafari = (api) => String(api?.runtime?.getURL?.('') ?? '').startsWith('safari-');
 
+  // clean: clean verbatim (no um, uh, stumbles). cleanStrict, its stricter level, also
+  // hides YouTube's sound tags ("[Applause]", "[Music]"…); it does nothing while clean is off.
   // enabled: the popup's master switch. Off leaves YouTube's own captions alone
   // everywhere and dims the toolbar icon (background.js).
   const DEFAULTS = {
     enabled: true,
-    style: 'frosted', size: 'medium', clean: true, highlight: true, boringHighlight: false,
+    style: 'frosted', size: 'medium', clean: true, cleanStrict: false, highlight: true, boringHighlight: false,
     frostedWindow: 'medium', tiktokWindow: 'off', boringWindow: '75', tiktokColor: 'pink',
   };
 

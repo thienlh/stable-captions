@@ -23,6 +23,8 @@
   };
   // Live chunks show only once complete, so every extra word shows them later.
   const LIVE_MAX_WORDS = { default: 5, boring: 6 };
+  // Longest "[…]" sound tag a live chunk keeps whole (as disfluency.js recognises it).
+  const MAX_TAG_WORDS = 6;
 
   /**
    * Where to cut a word stream into chunks. Shared by batch and live chunking.
@@ -225,6 +227,7 @@
       this.setStyle(options.style);
       this.pending = [];
       this.count = 0;
+      this.openTag = 0; // words into a "[…]" tag that has not closed yet
     }
 
     /** Chunk for this caption style from now on; words already pending stay. */
@@ -239,11 +242,19 @@
       const closed = [];
       for (const text of texts) {
         const word = { text, startMs: nowMs, endMs: nowMs };
-        if (r.breakBefore(this.pending, word)) closed.push(this._close());
+        // A "[…]" sound tag stays in one chunk, so clean verbatim can recognise it.
+        if (!this.openTag && r.breakBefore(this.pending, word)) closed.push(this._close());
         this.pending.push(word);
-        if (r.breakAfter(this.pending)) closed.push(this._close());
+        this._followTag(text);
+        if (!this.openTag && r.breakAfter(this.pending)) closed.push(this._close());
       }
       return closed;
+    }
+
+    /** Tracks whether the words so far are inside a "[…]" tag (at most MAX_TAG_WORDS). */
+    _followTag(text) {
+      if (this.openTag) this.openTag = text.includes(']') || this.openTag >= MAX_TAG_WORDS ? 0 : this.openTag + 1;
+      else if (text.startsWith('[') && !text.includes(']')) this.openTag = 1;
     }
 
     /** Closes whatever is pending (called after a pause). */
@@ -254,6 +265,7 @@
     _close() {
       const chunk = { ...this.rules.toChunk(this.pending), index: this.count++ };
       this.pending = [];
+      this.openTag = 0;
       return chunk;
     }
   }

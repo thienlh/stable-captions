@@ -64,6 +64,7 @@
     b.title = TIKTOK_COLOR_LABELS[b.dataset.tiktokColor];
     b.setAttribute('aria-label', b.title);
   }
+  const levels = [...$('clean-level').querySelectorAll('.level')];
 
   // ---------- Rendering ----------
 
@@ -124,6 +125,15 @@
     $('highlight').setAttribute('aria-checked', String(highlight));
     $('highlight-hint').textContent = highlight ? 'Mark the spoken word' : 'Show each caption plainly';
     $('clean').setAttribute('aria-checked', String(state.clean));
+    $('clean-hint').textContent = state.clean && state.cleanStrict
+      ? 'No um, no [Applause]' : 'No um, uh or “I I I”';
+    $('clean-level').hidden = !state.clean;
+    const cleanLevel = state.cleanStrict ? 'strict' : 'light';
+    for (const b of levels) {
+      const picked = b.dataset.cleanLevel === cleanLevel;
+      b.setAttribute('aria-checked', String(picked));
+      b.tabIndex = picked ? 0 : -1;
+    }
 
     // Short's colour: the previews and the TV's hopping word follow it (popup.css).
     const tiktokColor = safari && TIKTOK_COLORS.includes(state.tiktokColor) ? state.tiktokColor : 'yellow';
@@ -166,6 +176,7 @@
     else if (t.dataset.sizeStep) stepSize(Number(t.dataset.sizeStep));
     else if (t.dataset.window) update({ [WINDOWS[state.style].key]: t.dataset.window });
     else if (t.dataset.tiktokColor) update({ tiktokColor: t.dataset.tiktokColor });
+    else if (t.dataset.cleanLevel) update({ cleanStrict: t.dataset.cleanLevel === 'strict' });
     else if (t.id === 'highlight') toggleHighlight();
     else if (t.id === 'clean') update({ clean: !state.clean });
     else if (t.id === 'status') {
@@ -174,17 +185,19 @@
     }
   });
 
-  // A radio group: the arrow keys move the pick (and focus) to the next dot, wrapping.
+  // A radio group: the arrow keys move the pick (and focus) to the next option, wrapping.
   const ARROWS = { ArrowRight: 1, ArrowDown: 1, ArrowLeft: -1, ArrowUp: -1 };
-  $('tiktok-color').addEventListener('keydown', (e) => {
+  const radioKeys = (group, options, patchFor) => group.addEventListener('keydown', (e) => {
     const step = ARROWS[e.key];
-    const i = swatches.indexOf(e.target);
+    const i = options.indexOf(e.target);
     if (!step || i < 0) return;
     e.preventDefault();
-    const next = swatches[(i + step + swatches.length) % swatches.length];
-    update({ tiktokColor: next.dataset.tiktokColor });
+    const next = options[(i + step + options.length) % options.length];
+    update(patchFor(next));
     next.focus();
   });
+  radioKeys($('tiktok-color'), swatches, (b) => ({ tiktokColor: b.dataset.tiktokColor }));
+  radioKeys($('clean-level'), levels, (b) => ({ cleanStrict: b.dataset.cleanLevel === 'strict' }));
 
   $('status').addEventListener('animationend', (e) => {
     if (e.animationName === 'crt-on' || e.animationName === 'crt-off') $('status').classList.remove('switching');
