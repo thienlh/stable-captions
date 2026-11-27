@@ -165,3 +165,40 @@ test('strict cleaning leaves the gap a sound tag covered, and finds repeats acro
 test('without strict, sound tags other than [Music] stay', () => {
   assert.equal(cleanText('[Applause] Thank you'), '[Applause] Thank you');
 });
+
+test('strict cleaning stops a tag at its first "]", even before a full-width stop', () => {
+  assert.equal(strictText('[拍手]。 ありがとう [音楽]'), 'ありがとう');
+  assert.equal(strictText('はい [拍手]。 ありがとう'), 'はい。 ありがとう');
+  assert.equal(strictText('[Applause]and more] words'), '[Applause]and more] words', 'a "]" glued to letters is no tag end');
+});
+
+test('strict cleaning turns a comma before a tag into the tag’s stop', () => {
+  assert.equal(strictText('Well, [Laughter]. Next'), 'Well. Next');
+  assert.equal(strictText('Well, [Laughter] next'), 'Well, next', 'no stop on the tag: the comma stays');
+});
+
+test('a dropped tag that opened a caption cue hands the cue start to the next word', () => {
+  const words = [
+    { text: 'First', startMs: 0, endMs: 400, estimated: true, preserveLine: true, cueStart: true },
+    { text: 'line', startMs: 400, endMs: 800, estimated: true, preserveLine: true },
+    { text: '[Applause]', startMs: 8000, endMs: 8500, estimated: true, preserveLine: true, cueStart: true },
+    { text: 'Thank', startMs: 8500, endMs: 9000, estimated: true, preserveLine: true },
+    { text: 'you', startMs: 9000, endMs: 10000, estimated: true, preserveLine: true },
+  ];
+  const out = new Disfluency().clean(words, { strict: true });
+  assert.deepEqual(out.map((w) => [w.text, Boolean(w.cueStart)]), [['First', true], ['line', false], ['Thank', true], ['you', false]]);
+  assert.deepEqual(new CaptionChunker().build(out).map((c) => c.text), ['First line', 'Thank you']);
+  assert.equal(words[3].cueStart, undefined, 'the input words are not changed');
+});
+
+test('a filler right after a dropped tag does not stretch the word before it over the pause', () => {
+  const words = [
+    { text: 'well', startMs: 0, endMs: 300 },
+    { text: '[Applause]', startMs: 300, endMs: 5300 },
+    { text: 'um', startMs: 5300, endMs: 5600 },
+    { text: 'anyway', startMs: 5600, endMs: 6000 },
+  ];
+  const out = new Disfluency().clean(words, { strict: true });
+  assert.deepEqual(out.map((w) => [w.text, w.startMs, w.endMs]), [['well', 0, 300], ['anyway', 5600, 6000]]);
+  assert.deepEqual(new CaptionChunker().build(out).map((c) => c.text), ['well', 'anyway']);
+});

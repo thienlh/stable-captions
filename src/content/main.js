@@ -152,6 +152,8 @@
     rechunk() {
       if (!this.words.length) return;
       this.cues = this.buildChunks(this.words);
+      // Cleaning can leave no cues at all (a "[Music]"-only track): take the last one down.
+      if (!this.cues.length) this.overlay.render(null);
       this.renderNow();
     }
 
