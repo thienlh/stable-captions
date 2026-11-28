@@ -47,7 +47,7 @@
       // Standalone words (e.g. the ♪ music cue) always get a chunk of their own.
       // A manual caption cue starts its own chunk. Only preserved lines bypass
       // the normal break rules; estimated timing alone says nothing about size.
-      if (next.cueStart || next.standalone || last.standalone) return true;
+      if (next.speakerStart || next.cueStart || next.standalone || last.standalone) return true;
       if (next.preserveLine && last.preserveLine) return false;
       return next.startMs - last.endMs >= this.opts.pauseMs;
     }
@@ -107,7 +107,7 @@
 
     /** Characters on screen, spaces included. */
     _length(words) {
-      return words.reduce((n, w) => n + w.text.length + 1, -1);
+      return words.reduce((n, w) => n + w.text.length + (w.speakerStart ? 3 : 0) + 1, -1);
     }
 
     _endsClause(word) {
@@ -119,7 +119,7 @@
       return {
         startMs: balanced[0].startMs,
         endMs: balanced[balanced.length - 1].endMs,
-        text: balanced.map((w) => w.text).join(' '),
+        text: this.text.captionText(balanced),
         words: balanced,
       };
     }
@@ -134,7 +134,7 @@
       const ends = [];
       let used = 0;
       words.forEach((word, i) => {
-        used += word.text.length + (i ? 1 : 0);
+        used += word.text.length + (word.speakerStart ? 3 : 0) + (i ? 1 : 0);
         ends.push(used);
       });
       const total = ends[ends.length - 1];
@@ -185,6 +185,7 @@
 
     build(words) {
       const r = this.rules;
+      words = r.text.groupSoundTags(r.text.withSpeakerBoundaries(words));
       const chunks = [];
       let current = [];
       let pulledIn = 0; // words of a stranded tail still to take past the size cap
@@ -228,6 +229,7 @@
       this.pending = [];
       this.count = 0;
       this.openTag = 0; // words into a "[…]" tag that has not closed yet
+      this.speakerStart = false;
     }
 
     /** Chunk for this caption style from now on; words already pending stay. */
@@ -241,7 +243,16 @@
       const r = this.rules;
       const closed = [];
       for (const text of texts) {
+        if (text === '>>') {
+          if (this.pending.length) closed.push(this._close());
+          this.speakerStart = true;
+          continue;
+        }
         const word = { text, startMs: nowMs, endMs: nowMs };
+        if (this.speakerStart) {
+          word.speakerStart = true;
+          this.speakerStart = false;
+        }
         // A "[…]" sound tag stays in one chunk, so clean verbatim can recognise it.
         if (!this.openTag && r.breakBefore(this.pending, word)) closed.push(this._close());
         this.pending.push(word);

@@ -2,6 +2,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 
 // Loaded before `window` exists, so main.js does not auto-start.
+require('../src/core/text-utils.js');
 require('../src/content/track-provider.js');
 require('../src/content/main.js');
 
@@ -666,5 +667,36 @@ test('cleaning that leaves no cues takes the caption on screen down', () => {
   } finally {
     delete dataset.ytscClean;
     delete dataset.ytscCleanStrict;
+  }
+});
+
+test('a fully cleaned live chunk clears the previous caption immediately', () => {
+  const { controller, overlay } = makeController();
+  const { LiveDomSource, LiveChunker } = globalThis.YTSC;
+  const dataset = document.documentElement.dataset;
+  const oldClean = dataset.ytscClean;
+  let emit;
+  globalThis.YTSC.LiveDomSource = class {
+    constructor({ onChunk }) { emit = onChunk; }
+    start() {}
+    stop() {}
+  };
+  globalThis.YTSC.LiveChunker = class {};
+  try {
+    dataset.ytscClean = 'true';
+    controller.disfluency = { clean: words => words.filter(w => w.text !== 'um') };
+    controller.startLiveMode();
+    emit({ words: [{ text: 'hello', speakerStart: true }] });
+    assert.equal(overlay.calls.at(-1), 'render:>> hello');
+    emit({ words: [{ text: 'um' }] });
+    assert.equal(overlay.calls.at(-1), 'render:null');
+    emit({ words: [{ text: 'something', speakerStart: true }] });
+    assert.equal(overlay.calls.at(-1), 'render:>> something');
+  } finally {
+    controller.stop();
+    globalThis.YTSC.LiveDomSource = LiveDomSource;
+    globalThis.YTSC.LiveChunker = LiveChunker;
+    if (oldClean === undefined) delete dataset.ytscClean;
+    else dataset.ytscClean = oldClean;
   }
 });

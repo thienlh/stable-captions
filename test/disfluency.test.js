@@ -42,8 +42,15 @@ test('keeps a repeated phrase in a manual caption', () => {
 
 test('collapses repeats, keeping the last copy', () => {
   assert.equal(cleanText('I I I think the the main thing'), 'I think the main thing');
-  assert.equal(cleanText('nobody, nobody believed it'), 'nobody believed it');
-  assert.equal(cleanText('không ai, không ai tin'), 'không ai tin');
+  assert.equal(cleanText('with with the photos'), 'with the photos');
+});
+
+test('preserves repetitions that can carry emphasis or different grammatical roles', () => {
+  for (const text of [
+    'nobody, nobody believed it', 'không ai, không ai tin', 'No, no, no!',
+    'WHOA WHOA WHOA?', 'very very good', 'tell you you did well', 'believe that that was me',
+    'the problem is is it enough', 'she had had enough',
+  ]) assert.equal(cleanText(text), text);
 });
 
 test('sees repeats through fillers', () => {
@@ -201,4 +208,115 @@ test('a filler right after a dropped tag does not stretch the word before it ove
   const out = new Disfluency().clean(words, { strict: true });
   assert.deepEqual(out.map((w) => [w.text, w.startMs, w.endMs]), [['well', 0, 300], ['anyway', 5600, 6000]]);
   assert.deepEqual(new CaptionChunker().build(out).map((c) => c.text), ['well', 'anyway']);
+});
+
+test('repetition never crosses sentence, speaker, manual-cue or pause boundaries', () => {
+  for (const punctuation of ['.', '?', '!', '。', '؟']) {
+    const input = `I${punctuation} I think`;
+    assert.equal(cleanText(input), input);
+  }
+  for (const boundary of [{ speakerStart: true }, { cueStart: true }, { estimated: true }]) {
+    const words = timed('I I think');
+    Object.assign(words[1], boundary);
+    assert.equal(new Disfluency().clean(words).map(w => w.text).join(' '), 'I I think');
+  }
+  const words = timed('I I think');
+  words[1].startMs = 2000;
+  words[1].endMs = 2200;
+  words[2].startMs = 2300;
+  assert.equal(new Disfluency().clean(words).map(w => w.text).join(' '), 'I I think');
+  assert.equal(cleanText('I um. I think'), 'I. I think');
+});
+
+test('empty speaker turns disappear and never donate punctuation to another speaker', () => {
+  assert.equal(cleanText('>> Um,'), '');
+  assert.equal(cleanText('>> Um >> Hello'), 'Hello');
+  assert.equal(strictText('Hello >> [Laughter]. >> Bye'), 'Hello Bye');
+  assert.equal(strictText('>> [Applause] um'), '');
+  const words = new Disfluency().clean(timed('Hello >> Um, she knows'));
+  assert.equal(words[1].text, 'She');
+  assert.equal(words[1].speakerStart, true);
+  assert.equal(words[0].endMs, 250);
+});
+
+test('quote repair preserves opening and closing marks around removed fillers', () => {
+  assert.equal(cleanText('I said, “Um hello.”'), 'I said, “Hello.”');
+  assert.equal(cleanText('I said, "Uh hi."'), 'I said, "Hi."');
+  assert.equal(cleanText('It was "fine um."'), 'It was "fine."');
+  assert.equal(cleanText('>> "Uh >> hello'), 'hello', 'an unfinished quote stays with its speaker');
+});
+
+test('brief music next to speech stays without losing speaker boundaries', () => {
+  const input = timed('Hello >> [Music] bye');
+  const output = new Disfluency().clean(input);
+  assert.equal(output[1].speakerStart, true);
+  assert.equal(textOf(output), 'Hello ♪ bye');
+  assert.equal(input[1].text, '>>');
+  // Zero-duration words come from live captions: their actual duration is unknown.
+  const live = [{ text: '[Music]', startMs: 0, endMs: 0 }, { text: 'Hello', startMs: 0, endMs: 0 }];
+  assert.equal(textOf(new Disfluency().clean(live)), '♪ Hello');
+  assert.equal(textOf(new Disfluency().clean(timed('[Music]'))), '♪', 'an isolated note remains');
+});
+
+const textOf = words => words.map(w => w.text).join(' ');
+
+test('a retained sound description is not searched for hesitation fillers', () => {
+  assert.equal(cleanText('[um] hello'), '[um] hello');
+  assert.equal(cleanText('[people say uh] hello'), '[people say uh] hello');
+});
+
+test('self-contained quotes and parentheses disappear with a removed filler', () => {
+  for (const [input, expected] of [
+    ['He said "um" to him', 'He said to him'],
+    ['I said, "Um." Next sentence', 'I said. Next sentence'],
+    ['He said (uh) to him', 'He said to him'],
+    ['He said “um” to him', 'He said to him'],
+    ['He said ("um") to him', 'He said to him'],
+    ['He said （uh） to him', 'He said to him'],
+    ['He said "um". Next', 'He said. Next'],
+    ['I said "hello uh"', 'I said "hello"'],
+  ]) assert.equal(cleanText(input), expected, input);
+});
+
+test('terminal repair avoids duplicate stops and closers in multiple scripts', () => {
+  for (const [input, expected] of [
+    ['He said "Done." um.', 'He said "Done."'],
+    ['終わり。 ờ.', '終わり。'],
+    ['終わり！ ờ.', '終わり！'],
+    ['انتهى؟ um.', 'انتهى؟'],
+    ['I said, "Hi," um."', 'I said, "Hi."'],
+    ['I said، um.', 'I said.'],
+    ['I said， um.', 'I said.'],
+    ['I said、 um.', 'I said.'],
+  ]) assert.equal(cleanText(input), expected, input);
+  assert.equal(strictText('انتهى؟ [Laughter].'), 'انتهى؟');
+  assert.equal(strictText('I said، [Laughter].'), 'I said.');
+});
+
+test('a chain of fillers preserves its entire pause once cumulative absorption reaches one second', () => {
+  const words = [
+    { text: 'Well', startMs: 0, endMs: 300 },
+    { text: 'um', startMs: 300, endMs: 800 },
+    { text: 'uh', startMs: 800, endMs: 1400 },
+    { text: 'er', startMs: 1400, endMs: 2000 },
+    { text: 'okay', startMs: 2000, endMs: 2300 },
+  ];
+  const original = structuredClone(words);
+  const out = new Disfluency().clean(words);
+  assert.deepEqual(out, [words[0], words[4]]);
+  assert.deepEqual(new CaptionChunker().build(out).map(c => c.text), ['Well', 'okay']);
+  assert.deepEqual(words, original);
+  const short = [words[0], words[1], { text: 'uh', startMs: 800, endMs: 1000 }, { text: 'okay', startMs: 1000, endMs: 1300 }];
+  assert.equal(new Disfluency().clean(short)[0].endMs, 1000, 'a genuinely short hesitation can still be absorbed');
+});
+
+test('complete emphatic replies stay while unfinished repeated prefixes still clean', () => {
+  for (const input of [
+    'Yes, I am, I am.', 'He is, he is!', 'She was, she was.',
+    'We are, we are', 'You have, you have.', 'Yes, I am, I am. Next question.',
+    'I am, I am, I am.',
+  ]) assert.equal(cleanText(input), input);
+  assert.equal(cleanText('I was like I was like happy'), 'I was like happy');
+  assert.equal(cleanText('I was I was I was happy'), 'I was happy');
+  assert.equal(cleanText('So I was like so I was like okay'), 'So I was like okay');
 });

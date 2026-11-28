@@ -153,18 +153,18 @@
       const formatted = this._formattedTrack(events);
       // A plain manual track may contain lyrics or prose. Include one-word
       // cues like "stay", but leave a stream of single-word ASR events alone.
-      const manualLines = !formatted && this._manualLineTrack(events);
+      const manualLines = !asr && !formatted && this._manualLineTrack(events);
 
       // Pass 1: which words each event adds. Rolling windows repeat the previous
       // window's words; keep only new ones. Untimed captions only count as a
       // window when the new line extends the previous one ("Was" → "Was bedeutet").
       // Sharing a word or two, or repeating the line, is a lyric, not a window.
       const blocks = [];
-      let prevTexts = [];
-      let prevEndMs = -Infinity;
+      const previousBlocks = new Map();
+      const pendingSpeakers = new Set();
       const untimedEndMs = new Map(); // caption window -> end of its last untimed block
       events.forEach((event, i) => {
-        if (this.text.isRollupBreak(event)) return;
+        if (this.text.isRollupBreak(event) && !event.segs.some(seg => seg.isSpeakerChange)) return;
         const startMs = Number(event?.tStartMs);
         if (!Number.isFinite(startMs)) return;
         let endMs = this._eventEndMs(event, startMs);
@@ -172,25 +172,44 @@
           const nextStart = Number(events[i + 1]?.tStartMs);
           endMs = nextStart > startMs ? nextStart : startMs + 1800;
         }
-        const texts = this._eventWords(event, startMs, endMs).map((w) => w.text);
+        const windowId = event.wWinId ?? null;
+        const carriedSpeaker = pendingSpeakers.has(windowId);
+        const tokens = this._eventTokens(event, startMs, endMs);
+        const eventWords = this.text.withSpeakerBoundaries(tokens);
+        if (eventWords.length) {
+          if (carriedSpeaker) eventWords[0] = { ...eventWords[0], speakerStart: true };
+          pendingSpeakers.delete(windowId);
+        }
+        if (tokens.at(-1)?.text === '>>') pendingSpeakers.add(windowId);
+        const texts = eventWords.map((w) => w.text);
         if (!texts.length) return;
+        const previous = previousBlocks.get(windowId);
+        const prevTexts = previous?.words.map(w => w.text) || [];
         const overlap = this.merger.overlapSize(prevTexts, texts);
         const hasOffsets = this._hasWordOffsets(event);
-        const rolling =
-          formatted || hasOffsets
+        // Display intervals overlap even when somebody says the same words
+        // again. Timed words are a replay only when their speech times agree.
+        const grew = this._windowGrew(prevTexts, texts, overlap);
+        // Repeated leading markers also occur in updates of the same growing
+        // window. Only a strict extension of an unfinished, overlapping turn
+        // can reuse one; a separately carried marker always starts a new turn.
+        const sameMarkedWindow = previous?.words[0].speakerStart && grew &&
+          startMs < previous.endMs && !this.text.sentenceIsComplete(prevTexts.at(-1));
+        const rolling = !carriedSpeaker && (hasOffsets
+          ? previous && (previous.hasOffsets || previous.words.length === 1) && overlap > 0 && eventWords.slice(0, overlap).every((word, j) =>
+            Math.abs(word.startMs - previous.words[previous.words.length - overlap + j].startMs) <= 20)
+          : (!eventWords[0].speakerStart || sameMarkedWindow) && (formatted
             ? overlap >= 2 || (overlap >= 1 && (event.aAppend || overlap === prevTexts.length))
-            : this._windowGrew(prevTexts, texts, overlap);
-        const drop = rolling && startMs <= prevEndMs + 1000 ? overlap : 0;
-        const windowId = event.wWinId ?? null;
+            : grew));
+        const drop = rolling && startMs <= previous.endMs + 1000 ? overlap : 0;
         // Two-line ASR blocks roll up: the previous block leaves the screen when
         // this block's second line is said. That is the only line timing we get.
         // Overlapping manual cues don't roll up, so they never use it.
         const lastLineMs = asr && !hasOffsets ? untimedEndMs.get(windowId) : null;
-        blocks.push({ event, startMs, endMs, hasOffsets, rolling, drop, lastLineMs });
+        blocks.push({ event, startMs, endMs, hasOffsets, rolling, drop, lastLineMs, carriedSpeaker });
         if (hasOffsets) untimedEndMs.delete(windowId);
         else untimedEndMs.set(windowId, endMs);
-        prevTexts = texts;
-        prevEndMs = endMs;
+        previousBlocks.set(windowId, { words: eventWords, hasOffsets, endMs });
       });
 
       // Pass 2, backwards: time each event's new words. An untimed block stays on
@@ -208,6 +227,7 @@
         const cutoff = nextNewWordMs.get(windowId);
         if (!hasOffsets && cutoff > startMs && cutoff < endMs) endMs = cutoff;
         const eventWords = this._eventWords(event, startMs, endMs, lastLineMs).slice(block.drop);
+        if (block.carriedSpeaker && eventWords.length) eventWords[0] = { ...eventWords[0], speakerStart: true };
         block.words = eventWords;
         if (!eventWords.length) continue;
         nextNewWordMs.set(windowId, eventWords[0].startMs);
@@ -297,12 +317,22 @@
      * second of two lines starts, so each line is spread over its own span.
      */
     _eventWords(event, startMs, endMs, lastLineMs = null) {
+      return this.text.withSpeakerBoundaries(this._eventTokens(event, startMs, endMs, lastLineMs));
+    }
+
+    /** Retain trailing markers here so parseWords can carry them across events. */
+    _eventTokens(event, startMs, endMs, lastLineMs = null) {
       let segs = Array.isArray(event?.segs) ? event.segs : [];
       const hasOffsets = this._hasWordOffsets(event);
       if (!hasOffsets) {
+        // Keep flags even on empty/whitespace segments or later segments of an
+        // untimed cue. Normalization below attaches each marker to its next word.
+        const raw = segs.map(seg => {
+          const text = seg.utf8 || '';
+          return seg.isSpeakerChange && !/^\s*>>(?=\s|$)/u.test(text) ? ` >> ${text}` : text;
+        }).join('');
         // Authored captions put a line break in the text, not in a separate event.
-        const groups = this.text
-          .rawEventText(event)
+        const groups = raw
           .split(/\r?\n+/)
           .map((line) => this.text.splitWords(line))
           .filter((line) => line.length);
@@ -325,6 +355,7 @@
       const out = [];
       segs.forEach((seg, i) => {
         const texts = seg.texts || this.text.splitWords(seg.utf8);
+        if (!texts.length && seg.isSpeakerChange) texts.push('>>');
         if (!texts.length) return;
         const segStart = startMs + Number(seg.tOffsetMs || 0);
         const next = segs[i + 1];
@@ -343,6 +374,7 @@
             timed: hasOffsets && texts.length === 1,
           };
           if (seg.lineBreakAt?.has(wordIndex)) word.lineBreak = true;
+          if (wordIndex === 0 && seg.isSpeakerChange) word.speakerStart = true;
           out.push(word);
         });
       });

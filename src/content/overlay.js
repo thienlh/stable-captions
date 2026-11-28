@@ -135,8 +135,10 @@
       this.el.textContent = '';
       const words = chunk.words?.length ? chunk.words : [{ text: chunk.text }];
       this.spans = words.map((word, i) => {
-        if (word.lineBreak) this.el.appendChild(document.createElement('br'));
+        if (i && word.lineBreak) this.el.appendChild(document.createElement('br'));
         else if (i) this.el.appendChild(document.createTextNode(' '));
+        // The marker follows its surviving speech, without its own timing/highlight.
+        if (word.speakerStart) this.el.appendChild(document.createTextNode('>> '));
         const span = document.createElement('span');
         span.className = 'ytsc-word';
         paintWord(span, word.text);

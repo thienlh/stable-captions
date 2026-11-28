@@ -62,3 +62,39 @@ test('live chunks keep a "[…]" sound tag whole, so clean verbatim can drop it'
   const words = '[one two three four five six seven eight'.split(' ');
   assert.ok(unclosed.push(words, 0).length, 'an unclosed "[" does not hold chunks back forever');
 });
+
+test('live speaker markers split turns and never become words or empty chunks', () => {
+  const live = new LiveChunker();
+  const closed = live.push(['hello', '>>', '>>', 'Um,', 'she', 'knows.'], 0);
+  assert.deepEqual(closed.map(c => c.text), ['hello', '>> Um, she knows.']);
+  assert.equal(closed[1].words[0].speakerStart, true);
+  assert.deepEqual(live.push(['>>'], 10), []);
+  assert.equal(live.flush(), null);
+  assert.equal(live.push(['Bye.'], 20)[0].words[0].speakerStart, true);
+});
+
+test('live diff preserves new short turns instead of treating markers as stable speech', () => {
+  for (const next of ['>> Hi', '>> Hello there']) {
+    const d = new LiveWordDiff();
+    assert.deepEqual(d.push('>> Um'), ['>>', 'Um']);
+    assert.deepEqual(d.push(next), next.split(' '));
+    assert.deepEqual(d.push(`${next} again`), ['again']);
+  }
+});
+
+test('live diff still recognizes growing turns and corrections with a real speech prefix', () => {
+  const d = new LiveWordDiff();
+  assert.deepEqual(d.push('>> Was'), ['>>', 'Was']);
+  assert.deepEqual(d.push('>> Was bedeutet'), ['bedeutet']);
+  assert.deepEqual(d.push('>> Was bedeutet dieses Wort'), ['dieses', 'Wort']);
+  assert.deepEqual(d.push('>> Was bedeutet dieses Worte heute'), ['heute']);
+});
+
+test('live short-turn delivery reaches the chunker with its speaker marker', () => {
+  const diff = new LiveWordDiff();
+  const chunker = new LiveChunker();
+  chunker.push(diff.push('>> Um'), 0);
+  assert.equal(chunker.flush().text, '>> Um');
+  chunker.push(diff.push('>> Hi'), 1000);
+  assert.equal(chunker.flush().text, '>> Hi');
+});
