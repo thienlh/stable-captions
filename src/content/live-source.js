@@ -42,8 +42,12 @@
       let overlap = this.merger.overlapSize(prevKeys, nextKeys);
       if (!overlap && prev.length > 1) {
         // ASR often rewrites its last word; ignore it and retry.
-        overlap = this.merger.overlapSize(prevKeys.slice(0, -1), nextKeys);
-        if (overlap) overlap += nextKeys.length > overlap ? 1 : 0;
+        const stable = this.merger.overlapSize(prevKeys.slice(0, -1), nextKeys);
+        // A marker-only match (">> Um" -> ">> Hi") is a new short turn,
+        // not evidence that ASR rewrote a word already delivered to the chunker.
+        if (stable && nextKeys.slice(0, stable).some(k => /[\p{L}\p{N}]/u.test(k))) {
+          overlap = stable + (nextKeys.length > stable ? 1 : 0);
+        }
       }
       this.prev = next;
       return next.slice(overlap);

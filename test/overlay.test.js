@@ -155,3 +155,85 @@ test('emoji keep their full sequences and the surrounding word timing', () => {
   assert.ok(overlay.spans[1].classList.contains('ytsc-active'));
   overlay.destroy();
 });
+
+test('strict cleaning renders one speaker marker after removing empty laughter turns', () => {
+  const { Json3Parser } = require('../src/core/json3-parser.js');
+  const { Disfluency } = require('../src/core/disfluency.js');
+  const { CaptionChunker } = require('../src/core/chunker.js');
+  const payload = { events: [
+    { tStartMs: 0, dDurationMs: 1000, segs: [{ utf8: '>> [laughter]', isSpeakerChange: 1 }] },
+    { tStartMs: 1000, dDurationMs: 1000, segs: [{ utf8: '>> something', isSpeakerChange: 1 }] },
+  ] };
+  const words = new Json3Parser().parseWords(payload, { asr: true });
+  const cleaned = new Disfluency().clean(words, { strict: true });
+  for (const style of ['frosted', 'tiktok', 'boring']) {
+    const overlay = new CaptionOverlay();
+    try {
+      const chunks = new CaptionChunker({ style }).build(cleaned);
+      assert.equal(chunks.length, 1);
+      assert.equal(chunks[0].text, '>> something');
+      overlay.render(chunks[0], chunks[0].startMs);
+      assert.equal(overlay.el.textContent, '>> something');
+      assert.equal(overlay.spans.length, 1, 'a marker does not become an extra timed word');
+      assert.equal(overlay.spans[0].textContent, 'something');
+      assert.ok(overlay.spans[0].classList.contains('ytsc-active'));
+    } finally {
+      overlay.destroy();
+    }
+  }
+});
+
+test('brief music notes and their speaker markers remain visible in normal cleaning', () => {
+  const { Disfluency } = require('../src/core/disfluency.js');
+  const { CaptionChunker } = require('../src/core/chunker.js');
+  const words = [
+    { text: '[Music]', startMs: 1000, endMs: 1083, speakerStart: true },
+    { text: 'something', startMs: 1083, endMs: 1400, speakerStart: true },
+  ];
+  const chunks = new CaptionChunker().build(new Disfluency().clean(words));
+  assert.deepEqual(chunks.map(c => c.text), ['>> ♪', '>> something']);
+  const overlay = new CaptionOverlay();
+  try {
+    overlay.render(chunks[0], 1000);
+    assert.equal(overlay.el.textContent, '>> ♪');
+    overlay.render(chunks[1], 1083);
+    assert.equal(overlay.el.textContent, '>> something');
+  } finally {
+    overlay.destroy();
+  }
+});
+
+test('a music tag on a second authored line becomes a note without an empty first line', () => {
+  const { Json3Parser } = require('../src/core/json3-parser.js');
+  const { Disfluency } = require('../src/core/disfluency.js');
+  const { CaptionChunker } = require('../src/core/chunker.js');
+  const words = new Json3Parser().parseWords({ events: [
+    { tStartMs: 0, dDurationMs: 2000, segs: [{ utf8: 'Hello\n[Music]' }] },
+    { tStartMs: 3000, dDurationMs: 1000, segs: [{ utf8: 'Bye' }] },
+  ] });
+  assert.equal(words.find(w => w.text === '[Music]').lineBreak, true);
+  const note = new CaptionChunker().build(new Disfluency().clean(words)).find(c => c.text === '♪');
+  assert.equal(note.words[0].lineBreak, undefined);
+  const overlay = new CaptionOverlay();
+  try {
+    overlay.render(note, note.startMs);
+    assert.equal(overlay.el.children[0].tagName, 'span');
+    assert.equal(overlay.el.textContent, '♪');
+  } finally {
+    overlay.destroy();
+  }
+  assert.equal(words.find(w => w.text === '[Music]').lineBreak, true, 'source words stay unchanged');
+});
+
+test('overlay ignores a leading lineBreak but preserves interior line breaks', () => {
+  const overlay = new CaptionOverlay();
+  try {
+    overlay.render({ words: [
+      { text: 'First', startMs: 0, lineBreak: true },
+      { text: 'Second', startMs: 1000, lineBreak: true },
+    ] }, 0);
+    assert.deepEqual(overlay.el.children.map(c => c.tagName), ['span', 'br', 'span']);
+  } finally {
+    overlay.destroy();
+  }
+});

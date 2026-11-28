@@ -961,8 +961,11 @@
           // Live chunks are cleaned one at a time (repeats spanning two chunks stay).
           if (this.cleanEnabled()) {
             const words = this.disfluency.clean(chunk.words, this.cleanOptions());
-            if (!words.length) return;
-            chunk = { ...chunk, words, text: words.map((w) => w.text).join(' ') };
+            if (!words.length) {
+              this.hideLiveChunk();
+              return;
+            }
+            chunk = { ...chunk, words, text: NS.TextUtils.captionText(words) };
           }
           this.overlay.render(chunk);
           clearTimeout(this.liveHold);

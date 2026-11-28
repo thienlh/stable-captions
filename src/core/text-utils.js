@@ -13,8 +13,7 @@
   const QUOTES = /^["']+$/u;
 
   /**
-   * Pure text helpers for caption normalization.
-   * Single responsibility: string normalization only, no timing logic.
+   * Pure helpers for caption text and token boundaries. No DOM.
    */
   class TextUtils {
     static normalize(text) {
@@ -33,6 +32,54 @@
     static splitWords(text) {
       const n = TextUtils.normalize(text);
       return n ? TextUtils.attachPunctuation(n.split(/\s+/)) : [];
+    }
+
+    /** Store speaker markers as boundaries; display them beside the next kept word. */
+    static withSpeakerBoundaries(words) {
+      const out = [];
+      let marker = null;
+      for (const word of words) {
+        if (word.text === '>>') {
+          marker = word;
+          continue;
+        }
+        out.push(marker ? {
+          ...word, speakerStart: true,
+          // A marker split out of the same segment must not steal speech time.
+          startMs: marker.endMs === word.startMs ? marker.startMs : word.startMs,
+        } : word);
+        marker = null;
+      }
+      return out;
+    }
+
+    static captionText(words) {
+      return words.map(word => `${word.speakerStart ? '>> ' : ''}${word.text}`).join(' ');
+    }
+
+    /** End of a bounded sound tag; malformed brackets remain ordinary text. */
+    static soundTagEnd(words, i, span = 6) {
+      if (!words[i]?.text.startsWith('[')) return -1;
+      for (let j = i; j < Math.min(words.length, i + span); j++) {
+        const word = words[j];
+        if (j > i && (word.speakerStart || word.cueStart || word.text.startsWith('['))) return -1;
+        const close = word.text.indexOf(']');
+        if (close >= 0) return /^\]\p{P}*$/u.test(word.text.slice(close)) ? j : -1;
+      }
+      return -1;
+    }
+
+    /** Keep a sound description intact when applying caption size limits. */
+    static groupSoundTags(words) {
+      const out = [];
+      for (let i = 0; i < words.length; i++) {
+        const end = TextUtils.soundTagEnd(words, i);
+        if (end > i) {
+          out.push({ ...words[i], text: words.slice(i, end + 1).map(w => w.text).join(' '), endMs: words[end].endMs });
+          i = end;
+        } else out.push(words[i]);
+      }
+      return out;
     }
 
     /** 'prev' | 'next' for a punctuation-only token, else null. */
@@ -75,7 +122,7 @@
     }
 
     static sentenceIsComplete(text) {
-      return /[.!?…]["'»”’)}\]]*$/u.test(TextUtils.normalize(text));
+      return SENTENCE_PAUSE.test(TextUtils.normalize(text));
     }
 
     static rawEventText(event) {

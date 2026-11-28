@@ -132,18 +132,18 @@ test('parseWords folds punctuation segs into the neighbouring word', () => {
   );
 });
 
-test('parseWords drops a repeated window even when its punctuation segs split differently', () => {
+test('parseWords drops a replay with the same speech times even when punctuation segs split differently', () => {
   const words = new Json3Parser().parseWords({
     events: [
       { tStartMs: 0, dDurationMs: 1000, segs: [{ utf8: 'hello ,' }, { utf8: ' world', tOffsetMs: 400 }] },
       {
-        tStartMs: 1000,
-        dDurationMs: 1000,
+        tStartMs: 0,
+        dDurationMs: 2000,
         segs: [
           { utf8: 'hello' },
           { utf8: ' ,', tOffsetMs: 100 },
-          { utf8: ' world', tOffsetMs: 200 },
-          { utf8: ' again', tOffsetMs: 400 },
+          { utf8: ' world', tOffsetMs: 400 },
+          { utf8: ' again', tOffsetMs: 1400 },
         ],
       },
     ],
@@ -291,4 +291,105 @@ test('Arabic and full-width marks leave room for a pause like Latin ones', () =>
   const plain = gapAfter('aa');
   for (const text of ['aa،', 'aa؛', 'aa，', 'aa、', 'aa；']) assert.ok(gapAfter(text) > plain, `${text} is a clause pause`);
   for (const text of ['aa؟', 'aa。', 'aa！', 'aa？']) assert.ok(gapAfter(text) > gapAfter('aa،'), `${text} is a sentence pause`);
+});
+
+test('ASR without word offsets is still eligible for cleaning and retains speaker metadata', () => {
+  const words = new Json3Parser().parseWords({ events: [
+    { tStartMs: 0, dDurationMs: 1200, segs: [{ utf8: 'Um hello', isSpeakerChange: 1 }] },
+    { tStartMs: 1200, dDurationMs: 1200, segs: [{ utf8: '>> I I think' }] },
+  ] }, { asr: true });
+  assert.equal(words[0].speakerStart, true);
+  assert.equal(words.find(w => w.startMs === 1200).speakerStart, true);
+  assert.ok(words.every(w => !w.estimated && w.text !== '>>'));
+});
+
+test('matching words in different caption windows are independent speech', () => {
+  const events = [1, 2].map(wWinId => ({
+    tStartMs: 0, dDurationMs: 1000, wWinId,
+    segs: [{ utf8: 'hello' }, { utf8: ' world', tOffsetMs: 400 }],
+  }));
+  const words = new Json3Parser().parseWords({ events }, { asr: true });
+  assert.equal(words.filter(w => w.text === 'hello').length, 2);
+  assert.equal(words.filter(w => w.text === 'world').length, 2);
+});
+
+test('a timed replay can grow from one word without duplicating it', () => {
+  const words = new Json3Parser().parseWords({ events: [
+    { tStartMs: 1000, dDurationMs: 1000, segs: [{ utf8: 'Hello' }] },
+    { tStartMs: 1000, dDurationMs: 2000, segs: [{ utf8: 'Hello' }, { utf8: ' world', tOffsetMs: 500 }] },
+  ] }, { asr: true });
+  assert.deepEqual(words.map(w => [w.text, w.startMs]), [['Hello', 1000], ['world', 1500]]);
+});
+
+test('untimed growing windows retain one speaker marker, including formatted windows', () => {
+  const { TextUtils } = globalThis.YTSC;
+  for (const lines of [
+    ['>> Was', '>> Was bedeutet', '>> Was bedeutet dieses Wort?'],
+    ['>> Was\nbedeutet', '>> Was bedeutet\ndieses Wort?'],
+  ]) {
+    const events = lines.map((utf8, i) => ({ tStartMs: i * 500, dDurationMs: 2000, segs: [{ utf8 }] }));
+    const words = new Json3Parser().parseWords({ events }, { asr: true });
+    assert.equal(TextUtils.captionText(words), '>> Was bedeutet dieses Wort?');
+    assert.equal(words.filter(w => w.speakerStart).length, 1);
+  }
+});
+
+test('a completed or non-overlapping speaker turn is not a growing window', () => {
+  const { TextUtils } = globalThis.YTSC;
+  for (const [first, nextStart, expected] of [
+    ['>> Yes.', 500, '>> Yes. >> Yes. indeed'],
+    ['>> Yes', 2000, '>> Yes >> Yes indeed'],
+    ['Yes', 500, 'Yes >> Yes indeed'],
+  ]) {
+    const next = first.replace(/^>> /, '');
+    const words = new Json3Parser().parseWords({ events: [
+      { tStartMs: 0, dDurationMs: 1000, segs: [{ utf8: first }] },
+      { tStartMs: nextStart, dDurationMs: 1000, segs: [{ utf8: `>> ${next} indeed` }] },
+    ] }, { asr: true });
+    assert.equal(TextUtils.captionText(words), expected);
+  }
+});
+
+test('standalone and trailing speaker markers survive across events in the same window', () => {
+  for (const segs of [
+    [{ utf8: '>>' }],
+    [{ utf8: 'bye.' }, { utf8: ' >>', tOffsetMs: 500 }],
+    [{ utf8: '', isSpeakerChange: 1 }],
+    [{ utf8: '\n', isSpeakerChange: 1 }],
+  ]) {
+    const events = [
+      { tStartMs: 0, dDurationMs: 1000, wWinId: 1, aAppend: 1, segs },
+      { tStartMs: 1000, dDurationMs: 1000, wWinId: 2, segs: [{ utf8: 'Elsewhere' }] },
+      { tStartMs: 2000, dDurationMs: 1000, wWinId: 1, segs: [{ utf8: 'Hello' }] },
+    ];
+    const snapshot = structuredClone(events);
+    const words = new Json3Parser().parseWords({ events }, { asr: true });
+    assert.equal(words.find(w => w.text === 'Hello').speakerStart, true);
+    assert.equal(words.find(w => w.text === 'Elsewhere').speakerStart, undefined);
+    assert.equal(words.find(w => w.text === 'Hello').startMs, 2000, 'a marker must not move speech into an earlier event');
+    assert.ok(words.every(w => w.text !== '>>'));
+    assert.deepEqual(events, snapshot);
+  }
+});
+
+test('speaker flags on leading whitespace or later untimed segments are preserved', () => {
+  const { TextUtils } = globalThis.YTSC;
+  for (const segs of [
+    [{ utf8: ' ' }, { utf8: 'Hello', isSpeakerChange: 1 }],
+    [{ utf8: '\n', isSpeakerChange: 1 }, { utf8: 'Hello' }],
+    [{ utf8: 'Bye. ' }, { utf8: 'Hello', isSpeakerChange: 1 }],
+  ]) {
+    const words = new Json3Parser().parseWords({ events: [{ tStartMs: 0, dDurationMs: 1000, segs }] }, { asr: true });
+    assert.equal(words.find(w => w.text === 'Hello').speakerStart, true);
+    assert.ok(TextUtils.captionText(words).endsWith('>> Hello'));
+  }
+});
+
+test('a separately carried marker starts a new turn even when its text extends the old one', () => {
+  const words = new Json3Parser().parseWords({ events: [
+    { tStartMs: 0, dDurationMs: 1000, segs: [{ utf8: '>> Was' }] },
+    { tStartMs: 400, dDurationMs: 100, segs: [{ utf8: '>>' }] },
+    { tStartMs: 500, dDurationMs: 1000, segs: [{ utf8: 'Was bedeutet' }] },
+  ] }, { asr: true });
+  assert.equal(globalThis.YTSC.TextUtils.captionText(words), '>> Was >> Was bedeutet');
 });

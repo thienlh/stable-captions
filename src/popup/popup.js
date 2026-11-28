@@ -27,7 +27,7 @@
 
   // A still caption per style: the look, without words changing under the eye.
   // The second word is marked, as the word being spoken.
-  const SAMPLE = ['learn', 'something', 'new'];
+  const SAMPLE = ['learn', 'something', 'useful'];
 
   class Preview {
     constructor(el) {

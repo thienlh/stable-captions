@@ -95,18 +95,24 @@ To disable: `chrome://extensions` → toggle off.
 ## Clean verbatim (on by default)
 
 Popup toggle or `Shift+C`. Drops hesitation fillers (*um, uh, er* · *äh, ähm* · *ờ, ừm*) and
-stumbles (*I I I think*, *It's, um, it's*), keeping the last copy of a repeat; moves sentence
-punctuation and capitals onto neighbouring words and absorbs the dropped time so chunks don't
-split on fake pauses. YouTube's `[Music]` tags (`[Musik]`, `[âm nhạc]`, …) become a standalone
-♪ chunk, merged when consecutive; other tags like `[Applause]` stay. In live mode it works per
-chunk, so repeats spanning two chunks remain.
+clear unfinished restarts (*I I I think*, *It's, um, it's*, *I was like I was like*), keeping
+the last copy. Matching stops at sentence ends, speaker changes, caption cues and pauses;
+ambiguous doubles (*you you*, *that that*) and emphasis (*no no*, *WHOA WHOA*) stay.
+Restart phrases up to four words are supported conservatively; this is not general sentence
+rewriting. Punctuation, opening quotes and capitals move onto neighbouring words. Short
+hesitations can extend the previous word, but new sentences, speaker turns and long pauses
+do not. YouTube's `>>` speaker markers stay visible beside the next surviving word:
+removing an empty turn collapses `>> [laughter] >> something` to `>> something` in Strict mode.
+
+YouTube's `[Music]` tags (`[Musik]`, `[âm nhạc]`, …) become a standalone ♪ chunk, merged when
+adjacent, including brief music cues. Other tags like `[Applause]` stay whole. In live mode cleaning works per chunk,
+so repeats spanning two chunks remain; an entirely removed chunk clears the previous caption.
 
 **Strict**, "squeaky clean" (popup: the sparkly aqua dot beside the clean verbatim switch; the mint one is the default level) goes further: every sound tag
 YouTube's auto-captions insert (`[Applause]`, `[Laughter]`, `[Music]`, `[snorts]`, …, up to six
 words) is dropped, so only speech is left; no ♪ either. A tag's sentence stop stays on the word
 before it, and its time is left as a gap (the pause is real). `[ __ ]`, YouTube's bleeped swear
 word, is kept.
-Known rough edge: legitimate doubles (*that that*).
 
 ## Popup
 
